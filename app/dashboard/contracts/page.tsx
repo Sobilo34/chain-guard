@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,8 +27,9 @@ import {
   MoreVertical,
   ChevronDown,
 } from "lucide-react";
+import { addContract, getContracts, type DashboardContract } from "@/lib/api";
 
-const contracts = [
+const contractsFallback = [
   {
     id: "1",
     name: "Uniswap V3 Pool",
@@ -89,11 +90,23 @@ const contracts = [
 const getRiskBadge = (level: string) => {
   switch (level) {
     case "low":
-      return <Badge className="bg-success/10 text-success hover:bg-success/20 border-0">Low Risk</Badge>;
+      return (
+        <Badge className="bg-success/10 text-success hover:bg-success/20 border-0">
+          Low Risk
+        </Badge>
+      );
     case "medium":
-      return <Badge className="bg-warning/10 text-warning hover:bg-warning/20 border-0">Medium Risk</Badge>;
+      return (
+        <Badge className="bg-warning/10 text-warning hover:bg-warning/20 border-0">
+          Medium Risk
+        </Badge>
+      );
     case "high":
-      return <Badge className="bg-danger/10 text-danger hover:bg-danger/20 border-0">High Risk</Badge>;
+      return (
+        <Badge className="bg-danger/10 text-danger hover:bg-danger/20 border-0">
+          High Risk
+        </Badge>
+      );
     default:
       return <Badge variant="secondary">Unknown</Badge>;
   }
@@ -102,9 +115,13 @@ const getRiskBadge = (level: string) => {
 const getStatusBadge = (status: string) => {
   switch (status) {
     case "monitored":
-      return <Badge className="bg-success/10 text-success border-0">Monitored</Badge>;
+      return (
+        <Badge className="bg-success/10 text-success border-0">Monitored</Badge>
+      );
     case "paused":
-      return <Badge className="bg-warning/10 text-warning border-0">Paused</Badge>;
+      return (
+        <Badge className="bg-warning/10 text-warning border-0">Paused</Badge>
+      );
     default:
       return <Badge variant="secondary">Unknown</Badge>;
   }
@@ -124,14 +141,73 @@ export default function ContractsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [chainFilter, setChainFilter] = useState("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [newContract, setNewContract] = useState({ address: "", chain: "ethereum", name: "" });
+  const [newContract, setNewContract] = useState({
+    address: "",
+    chain: "ethereum",
+    name: "",
+  });
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [contracts, setContracts] = useState<DashboardContract[]>(
+    contractsFallback as DashboardContract[],
+  );
+
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+
+    const refresh = async () => {
+      try {
+        const data = await getContracts();
+        if (data.data.length > 0) {
+          setContracts(data.data);
+        }
+      } catch {}
+    };
+
+    refresh();
+    intervalId = setInterval(refresh, 15000);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, []);
+
+  const chainToSelector = (chain: string) => {
+    switch (chain) {
+      case "polygon":
+        return "polygon-testnet-amoy";
+      case "arbitrum":
+        return "ethereum-testnet-sepolia-arbitrum-1";
+      case "optimism":
+        return "ethereum-testnet-sepolia-optimism-1";
+      default:
+        return "ethereum-testnet-sepolia";
+    }
+  };
+
+  const handleAddContract = async () => {
+    if (!newContract.address.trim()) return;
+
+    await addContract({
+      address: newContract.address,
+      chainSelectorName: chainToSelector(newContract.chain),
+      name: newContract.name || undefined,
+    });
+
+    const refreshed = await getContracts();
+    if (refreshed.data.length > 0) {
+      setContracts(refreshed.data);
+    }
+
+    setNewContract({ address: "", chain: "ethereum", name: "" });
+    setIsAddDialogOpen(false);
+  };
 
   const filteredContracts = contracts.filter((contract) => {
     const matchesSearch =
       contract.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       contract.address.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesChain = chainFilter === "all" || contract.chain === chainFilter;
+    const matchesChain =
+      chainFilter === "all" || contract.chain === chainFilter;
     return matchesSearch && matchesChain;
   });
 
@@ -162,7 +238,8 @@ export default function ContractsPage() {
             <DialogHeader>
               <DialogTitle>Add New Contract</DialogTitle>
               <DialogDescription>
-                Enter the contract address and select the chain to start monitoring.
+                Enter the contract address and select the chain to start
+                monitoring.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -172,7 +249,9 @@ export default function ContractsPage() {
                   id="name"
                   placeholder="e.g., My DeFi Pool"
                   value={newContract.name}
-                  onChange={(e) => setNewContract({ ...newContract, name: e.target.value })}
+                  onChange={(e) =>
+                    setNewContract({ ...newContract, name: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -182,7 +261,9 @@ export default function ContractsPage() {
                   placeholder="0x..."
                   className="font-mono"
                   value={newContract.address}
-                  onChange={(e) => setNewContract({ ...newContract, address: e.target.value })}
+                  onChange={(e) =>
+                    setNewContract({ ...newContract, address: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -191,7 +272,9 @@ export default function ContractsPage() {
                   <select
                     id="chain"
                     value={newContract.chain}
-                    onChange={(e) => setNewContract({ ...newContract, chain: e.target.value })}
+                    onChange={(e) =>
+                      setNewContract({ ...newContract, chain: e.target.value })
+                    }
                     className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 pr-8 text-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="ethereum">Ethereum</option>
@@ -204,12 +287,13 @@ export default function ContractsPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setIsAddDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button onClick={() => setIsAddDialogOpen(false)}>
-                Start Monitoring
-              </Button>
+              <Button onClick={handleAddContract}>Start Monitoring</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -250,7 +334,10 @@ export default function ContractsPage() {
         {filteredContracts.map((contract) => {
           const chainInfo = getChainInfo(contract.chain);
           return (
-            <Card key={contract.id} className="border-border/50 transition-shadow hover:shadow-md">
+            <Card
+              key={contract.id}
+              className="border-border/50 transition-shadow hover:shadow-md"
+            >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -273,41 +360,45 @@ export default function ContractsPage() {
                     </div>
                   </div>
                   <div className="relative">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8"
-                      onClick={() => setMenuOpen(menuOpen === contract.id ? null : contract.id)}
+                      onClick={() =>
+                        setMenuOpen(
+                          menuOpen === contract.id ? null : contract.id,
+                        )
+                      }
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                     {menuOpen === contract.id && (
                       <>
-                        <div 
-                          className="fixed inset-0 z-40" 
-                          onClick={() => setMenuOpen(null)} 
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setMenuOpen(null)}
                         />
                         <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-md border border-border bg-popover p-1 shadow-lg">
-                          <Link 
+                          <Link
                             href={`/dashboard/contracts/${contract.id}`}
                             className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                             onClick={() => setMenuOpen(null)}
                           >
                             View Details
                           </Link>
-                          <button 
+                          <button
                             className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                             onClick={() => setMenuOpen(null)}
                           >
                             Configure Alerts
                           </button>
-                          <button 
+                          <button
                             className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                             onClick={() => setMenuOpen(null)}
                           >
                             Pause Monitoring
                           </button>
-                          <button 
+                          <button
                             className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm text-danger hover:bg-accent"
                             onClick={() => setMenuOpen(null)}
                           >
@@ -323,7 +414,8 @@ export default function ContractsPage() {
                 {/* Address */}
                 <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
                   <code className="text-xs text-muted-foreground">
-                    {contract.address.slice(0, 10)}...{contract.address.slice(-8)}
+                    {contract.address.slice(0, 10)}...
+                    {contract.address.slice(-8)}
                   </code>
                   <div className="flex items-center gap-1">
                     <Button
@@ -334,7 +426,12 @@ export default function ContractsPage() {
                     >
                       <Copy className="h-3 w-3" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      asChild
+                    >
                       <a
                         href={`https://etherscan.io/address/${contract.address}`}
                         target="_blank"
@@ -350,11 +447,15 @@ export default function ContractsPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-xs text-muted-foreground">TVL</p>
-                    <p className="text-sm font-semibold text-success">{contract.tvl}</p>
+                    <p className="text-sm font-semibold text-success">
+                      {contract.tvl}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Volatility</p>
-                    <p className="text-sm font-semibold">{contract.volatility}</p>
+                    <p className="text-sm font-semibold">
+                      {contract.volatility}
+                    </p>
                   </div>
                 </div>
 
@@ -370,7 +471,11 @@ export default function ContractsPage() {
                 </div>
 
                 {/* Action */}
-                <Button variant="outline" className="w-full gap-2 bg-transparent" asChild>
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 bg-transparent"
+                  asChild
+                >
                   <Link href={`/dashboard/contracts/${contract.id}`}>
                     View Details
                     <ArrowUpRight className="h-4 w-4" />
@@ -395,7 +500,10 @@ export default function ContractsPage() {
               : "Add your first contract to start monitoring"}
           </p>
           {!searchQuery && chainFilter === "all" && (
-            <Button className="mt-4 gap-2" onClick={() => setIsAddDialogOpen(true)}>
+            <Button
+              className="mt-4 gap-2"
+              onClick={() => setIsAddDialogOpen(true)}
+            >
               <Plus className="h-4 w-4" />
               Add Contract
             </Button>

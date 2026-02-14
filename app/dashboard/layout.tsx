@@ -9,7 +9,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "next-themes";
-import { useSearchParams } from "next/navigation";
 import {
   ShieldCheck,
   LayoutDashboard,
@@ -39,7 +38,6 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { theme, setTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -67,8 +65,10 @@ export default function DashboardLayout({
             {/* Desktop Navigation */}
             <nav className="hidden items-center gap-1 md:flex">
               {navigation.map((item) => {
-                const isActive = pathname === item.href || 
-                  (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== "/dashboard" &&
+                    pathname.startsWith(item.href));
                 return (
                   <Link
                     key={item.name}
@@ -77,7 +77,7 @@ export default function DashboardLayout({
                       "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
@@ -117,8 +117,8 @@ export default function DashboardLayout({
 
             {/* User Menu */}
             <div className="relative">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="gap-2 pl-2 pr-3"
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
               >
@@ -130,22 +130,22 @@ export default function DashboardLayout({
                 </span>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
               </Button>
-              
+
               {userMenuOpen && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={() => setUserMenuOpen(false)} 
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
                   />
                   <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-md border border-border bg-popover p-1 shadow-lg">
-                    <button 
+                    <button
                       className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <User className="h-4 w-4" />
                       Account
                     </button>
-                    <Link 
+                    <Link
                       href="/dashboard/settings"
                       className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
                       onClick={() => setUserMenuOpen(false)}
@@ -154,7 +154,7 @@ export default function DashboardLayout({
                       Settings
                     </Link>
                     <div className="my-1 h-px bg-border" />
-                    <Link 
+                    <Link
                       href="/"
                       className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-danger hover:bg-accent"
                       onClick={() => setUserMenuOpen(false)}
@@ -207,7 +207,7 @@ export default function DashboardLayout({
                       "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     <item.icon className="h-4 w-4" />
