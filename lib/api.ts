@@ -58,6 +58,18 @@ export type OverviewPayload = {
   }
 }
 
+export type ScanResult = {
+  riskLevel: string
+  riskType: string
+  confidence: number
+  reasoning: string
+  suggestedActions: string[]
+  affectedMetrics?: string[]
+  estimatedImpact?: string
+  source?: string
+  quotaExceeded?: boolean
+}
+
 export async function getOverview() {
   return fetchJson<{ data: OverviewPayload }>(`${API_BASE_URL}/api/overview`)
 }
@@ -82,7 +94,7 @@ export async function runGeminiScan(payload?: {
   chainSelectorName?: string
   contractName?: string
 }) {
-  return fetchJson<{ data: unknown }>(`${API_BASE_URL}/api/scan`, {
+  return fetchJson<{ data: ScanResult }>(`${API_BASE_URL}/api/scan`, {
     method: "POST",
     body: JSON.stringify(payload || {}),
   })

@@ -358,7 +358,7 @@ export default function DashboardPage() {
     setScanMessage(null);
     try {
       const first = liveContracts[0];
-      await runGeminiScan(
+      const scanResponse = await runGeminiScan(
         first
           ? {
               contractAddress: first.address,
@@ -367,7 +367,11 @@ export default function DashboardPage() {
             }
           : undefined,
       );
-      setScanMessage("Gemini scan complete.");
+      if (scanResponse.data.quotaExceeded) {
+        setScanMessage("Gemini quota exceeded — showing fallback assessment.");
+      } else {
+        setScanMessage("Gemini scan complete.");
+      }
       const response = await getOverview();
       if (response.data.alerts.length > 0) {
         setLiveAlerts(response.data.alerts);
