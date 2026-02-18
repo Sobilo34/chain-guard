@@ -72,22 +72,45 @@ export type ScanResult = {
   quotaExceeded?: boolean
 }
 
+export interface AlertPayload {
+  alerts: {
+    id: string
+    contractAddress: string
+    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+    message: string
+    details?: Record<string, any>
+    timestamp: string
+    resolved?: boolean
+    resolvedAt?: string
+  }[]
+  total: number
+}
+
 export async function getOverview() {
   return fetchJson<{ data: OverviewPayload }>(`${API_BASE_URL}/api/overview`)
 }
 
 export async function getContracts() {
-  return fetchJson<{ data: DashboardContract[] }>(`${API_BASE_URL}/api/contracts`)
+  return fetchJson<{ contracts: DashboardContract[] }>(`${API_BASE_URL}/api/contracts`)
+}
+
+export async function getContractDetail(address: string) {
+  return fetchJson<any>(`${API_BASE_URL}/api/contracts/${address}/detail`)
 }
 
 export async function addContract(payload: {
   address: string
   chainSelectorName: string
   name?: string
+  protocol?: string
 }) {
-  return fetchJson<{ data: DashboardContract }>(`${API_BASE_URL}/api/contracts`, {
+  return fetchJson<DashboardContract>(`${API_BASE_URL}/api/contracts`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      protocol: payload.protocol || "Generic protocol",
+      chain: payload.chainSelectorName,
+    }),
   })
 }
 
@@ -99,5 +122,36 @@ export async function runGeminiScan(payload?: {
   return fetchJson<{ data: ScanResult }>(`${API_BASE_URL}/api/scan`, {
     method: "POST",
     body: JSON.stringify(payload || {}),
+  })
+}
+
+export async function getAlerts(
+  address?: string,
+  severity?: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<AlertPayload> {
+  const params = new URLSearchParams()
+  if (address) params.append("address", address)
+  if (severity) params.append("severity", severity)
+  params.append("limit", limit.toString())
+  params.append("offset", offset.toString())
+
+  const response = await fetch(`${API_BASE_URL}/api/alerts?${params.toString()}`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function acknowledgeAlert(alertId: string) {
+  return fetchJson<{ success: boolean }>(`${API_BASE_URL}/api/alerts/${alertId}/acknowledge`, {
+    method: "POST",
+  })
+}
+
+export async function resolveAlert(alertId: string) {
+  return fetchJson<{ success: boolean }>(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
+    method: "POST",
   })
 }

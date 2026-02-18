@@ -291,19 +291,16 @@ const formatLastSync = (value: string) => {
 
 export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [liveKpis, setLiveKpis] = useState(kpiData);
-  const [liveContracts, setLiveContracts] = useState<DashboardContract[]>(
-    monitoredContracts as DashboardContract[],
-  );
-  const [liveAlerts, setLiveAlerts] = useState<DashboardAlert[]>(
-    recentAlerts as DashboardAlert[],
-  );
+  const [liveKpis, setLiveKpis] = useState<any[]>([]);
+  const [liveContracts, setLiveContracts] = useState<DashboardContract[]>([]);
+  const [liveAlerts, setLiveAlerts] = useState<DashboardAlert[]>([]);
   const [systemStatus, setSystemStatus] = useState({
     oracle: "online",
     riskEngine: "active",
     alertService: "running",
-    lastSync: "2 min ago",
+    lastSync: "just now",
   });
+  const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
 
@@ -334,7 +331,7 @@ export default function DashboardPage() {
           },
           {
             title: "Total Value Locked",
-            value: `$${data.kpis.totalValueLocked.toFixed(1)}M`,
+            value: `$${(data.kpis.totalValueLocked / 1000000).toFixed(1)}M`,
             change: "Derived from monitored contracts",
             icon: TrendingUp,
             color: "text-success",
@@ -353,15 +350,18 @@ export default function DashboardPage() {
         ];
 
         setLiveKpis(mappedKpis);
-        if (data.contracts.length > 0) setLiveContracts(data.contracts);
-        if (data.alerts.length > 0) setLiveAlerts(data.alerts);
+        setLiveContracts(data.contracts);
+        setLiveAlerts(data.alerts);
         setSystemStatus({
           oracle: data.system.oracle,
           riskEngine: data.system.riskEngine,
           alertService: data.system.alertService,
           lastSync: data.system.lastSync,
         });
-      } catch {}
+        setIsLoading(false);
+      } catch (err) {
+        console.error("Dashboard refresh failed:", err);
+      }
     };
 
     refresh();

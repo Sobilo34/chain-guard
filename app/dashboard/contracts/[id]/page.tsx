@@ -64,167 +64,147 @@ import {
   Zap,
   ChevronRight,
 } from "lucide-react";
+import { getContractDetail } from "@/lib/api";
+import { useEffect, useState } from "react";
 
-// Mock data
-const contractData = {
-  id: "1",
-  name: "Uniswap V3 Pool",
-  address: "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
-  chain: "ethereum",
-  status: "monitored",
-  tvl: "$8.2M",
-  price: "$2,847.32",
-  volume24h: "$1.2M",
-  liquidity: "85%",
-};
+interface HistoryItem {
+  time: string;
+  value?: number;
+  score?: number;
+}
 
-const volatilityHistory = [
-  { time: "Mon", value: 8.2 },
-  { time: "Tue", value: 9.5 },
-  { time: "Wed", value: 12.1 },
-  { time: "Thu", value: 18.4 },
-  { time: "Fri", value: 14.2 },
-  { time: "Sat", value: 10.8 },
-  { time: "Sun", value: 8.9 },
-];
+interface AISuggestion {
+  title: string;
+  description: string;
+}
 
-const liquidityData = [
-  { name: "Current", value: 85, threshold: 70 },
-  { name: "Min (24h)", value: 78, threshold: 70 },
-  { name: "Max (24h)", value: 92, threshold: 70 },
-];
-
-const riskBreakdown = [
-  { name: "Volatility", value: 30, color: "hsl(var(--chart-1))" },
-  { name: "Liquidity", value: 20, color: "hsl(var(--chart-2))" },
-  { name: "Manipulation", value: 15, color: "hsl(var(--chart-3))" },
-  { name: "Depeg", value: 35, color: "hsl(var(--chart-4))" },
-];
-
-const riskScoreHistory = [
-  { time: "1h", score: 72 },
-  { time: "2h", score: 75 },
-  { time: "3h", score: 68 },
-  { time: "4h", score: 71 },
-  { time: "5h", score: 74 },
-  { time: "6h", score: 72 },
-];
-
-const historicalAlerts = [
-  {
-    id: "1",
-    time: "2 hours ago",
-    type: "Volatility Spike",
-    severity: "medium",
-    status: "resolved",
-  },
-  {
-    id: "2",
-    time: "6 hours ago",
-    type: "Liquidity Drop",
-    severity: "low",
-    status: "resolved",
-  },
-  {
-    id: "3",
-    time: "1 day ago",
-    type: "Price Deviation",
-    severity: "high",
-    status: "resolved",
-  },
-  {
-    id: "4",
-    time: "2 days ago",
-    type: "Volume Surge",
-    severity: "low",
-    status: "resolved",
-  },
-];
-
-const aiSuggestions = [
-  {
-    title: "Increase Liquidity Threshold",
-    description:
-      "Based on recent volatility patterns, consider raising your liquidity drop threshold from 20% to 25% to receive earlier warnings.",
-  },
-  {
-    title: "Enable Manipulation Detection",
-    description:
-      "Your contract shows patterns that could benefit from our advanced manipulation detection feature. This monitors for sandwich attacks and front-running.",
-  },
-  {
-    title: "Add Price Feed Redundancy",
-    description:
-      "Consider adding multiple oracle price feeds for this asset to improve accuracy and reduce single point of failure risk.",
-  },
-];
-
-const CustomTooltip = ({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: Array<{ value: number; name: string; color?: string }>;
-  label?: string;
-}) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        {payload.map((entry, index) => (
-          <p key={index} className="text-sm font-semibold text-foreground">
-            {entry.name}: {entry.value}
-            {entry.name === "Volatility" || entry.name === "value" ? "%" : ""}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
-
-const getSeverityBadge = (severity: string) => {
-  switch (severity) {
-    case "low":
-      return (
-        <Badge className="bg-emerald-500/10 text-emerald-500 border-0 px-3 font-bold tracking-tight uppercase text-[10px]">
-          Low Risk
-        </Badge>
-      );
-    case "medium":
-      return (
-        <Badge className="bg-amber-500/10 text-amber-500 border-0 px-3 font-bold tracking-tight uppercase text-[10px]">
-          Moderate
-        </Badge>
-      );
-    case "high":
-      return (
-        <Badge className="bg-rose-500/10 text-rose-500 border-0 px-3 font-bold tracking-tight uppercase text-[10px]">
-          Critical
-        </Badge>
-      );
-    default:
-      return (
-        <Badge
-          variant="secondary"
-          className="px-3 font-bold uppercase text-[10px]"
-        >
-          Unknown
-        </Badge>
-      );
-  }
-};
+interface HistoricalAlert {
+  id: string;
+  time: string;
+  type: string;
+  severity: string;
+  status: string;
+}
 
 export default function ContractDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = use(params);
+  const { id: contractAddress } = use(params);
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDetail = async () => {
+      try {
+        const detail = await getContractDetail(contractAddress);
+        setData(detail);
+      } catch (err) {
+        console.error("Failed to fetch contract detail", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDetail();
+  }, [contractAddress]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-[80vh] items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-t-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex bg-slate-900 h-[80vh] items-center justify-center rounded-3xl m-6 border border-slate-800 shadow-2xl">
+        <div className="text-center space-y-6 max-w-md px-10">
+          <div className="mx-auto w-20 h-20 rounded-full bg-warning/10 flex items-center justify-center border border-warning/20">
+            <AlertTriangle className="h-10 w-10 text-warning" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-white uppercase tracking-tighter italic">
+              Terminal Locked
+            </h2>
+            <p className="text-slate-400 font-medium">
+              The requested oracle stream is not registered in the ecosystem.
+            </p>
+          </div>
+          <Link href="/dashboard/contracts">
+            <Button
+              variant="outline"
+              className="mt-4 border-slate-700 bg-slate-800/50 text-slate-300 hover:bg-slate-800 transition-all rounded-2xl h-12 px-8 font-black uppercase tracking-widest text-[10px]"
+            >
+              Back to Registry
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Use the fetched data
+  const contractData = {
+    id: data.address,
+    name: data.name,
+    address: data.address,
+    chain: data.chain,
+    status: data.riskLevel.toLowerCase(),
+    tvl: data.metrics?.tvl
+      ? `$${(data.metrics.tvl / 1000000).toFixed(1)}M`
+      : "$0.0M",
+    price: `$${data.metrics?.price?.toFixed(2) || "0.00"}`,
+    volume24h: data.metrics?.volume24h
+      ? `$${(data.metrics.volume24h / 1000000).toFixed(1)}M`
+      : "$0.0M",
+    liquidity: `${data.metrics?.liquidity?.toFixed(0) || "0"}%`,
+  };
+
+  const volatilityHistory: HistoryItem[] = data.history?.volatility || [];
+  // const riskScoreHistory: HistoryItem[] = data.history?.riskScore || [];
+  const historicalAlerts: HistoricalAlert[] = data.recentAlerts || [];
+  const aiSuggestions: AISuggestion[] = data.aiSuggestions || [];
+
+  const riskBreakdown = [
+    {
+      name: "Volatility",
+      value: data.riskScore > 30 ? 30 : data.riskScore,
+      color: "hsl(var(--chart-1))",
+    },
+    { name: "Liquidity", value: 20, color: "hsl(var(--chart-2))" },
+    { name: "Manipulation", value: 15, color: "hsl(var(--chart-3))" },
+    { name: "Depeg", value: 35, color: "hsl(var(--chart-4))" },
+  ];
+
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: {
+    active?: boolean;
+    payload?: Array<{ value: number; name: string; color?: string }>;
+    label?: string;
+  }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} className="text-sm font-semibold text-foreground">
+              {entry.name}: {entry.value}
+              {entry.name === "Volatility" || entry.name === "value" ? "%" : ""}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
   };
 
   return (
@@ -461,7 +441,7 @@ export default function ContractDetailPage({
               Machine Learning Forensics
             </h3>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {aiSuggestions.map((suggestion, i) => (
+              {aiSuggestions.map((suggestion: AISuggestion, i: number) => (
                 <motion.div
                   key={i}
                   whileHover={{ y: -5 }}
@@ -498,10 +478,14 @@ export default function ContractDetailPage({
               <div className="relative flex items-center justify-center py-6">
                 <div className="text-center">
                   <span className="text-6xl font-black tracking-tighter text-foreground">
-                    72
+                    {data.riskScore}
                   </span>
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                    Nominal
+                    {data.riskScore < 40
+                      ? "Low"
+                      : data.riskScore < 75
+                        ? "Nominal"
+                        : "Warning"}
                   </p>
                 </div>
                 {/* Animated Pulse around score */}
@@ -509,7 +493,7 @@ export default function ContractDetailPage({
               </div>
 
               <div className="mt-8 space-y-4">
-                {riskBreakdown.map((item, i) => (
+                {riskBreakdown.map((item: any, i: number) => (
                   <div key={i} className="space-y-1.5">
                     <div className="flex justify-between text-[11px] font-bold uppercase tracking-widest">
                       <span className="text-muted-foreground">{item.name}</span>
@@ -549,7 +533,7 @@ export default function ContractDetailPage({
               </Button>
             </CardHeader>
             <CardContent className="px-8 pb-8 space-y-4">
-              {historicalAlerts.map((alert, i) => (
+              {historicalAlerts.map((alert: HistoricalAlert, i: number) => (
                 <div
                   key={i}
                   className="flex items-start gap-3 rounded-2xl border border-border/40 bg-background/40 p-4 transition-colors hover:bg-background/60"

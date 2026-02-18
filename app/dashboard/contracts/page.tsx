@@ -27,80 +27,32 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  FileCode2,
-  Plus,
+  Bell,
   Search,
+  Plus,
   Filter,
-  ArrowUpRight,
-  Copy,
-  ExternalLink,
-  MoreVertical,
   ChevronDown,
-  Globe,
-  Activity,
+  LayoutGrid,
+  List,
+  AlertTriangle,
+  Clock,
+  ArrowUpRight,
   ShieldCheck,
-  Trash2,
   CheckCircle2,
+  Zap,
+  ChevronRight,
+  Activity,
+  Globe,
+  FileCode2,
+  Copy,
+  Trash2,
 } from "lucide-react";
-import { addContract, getContracts, type DashboardContract } from "@/lib/api";
-
-const contractsFallback = [
-  {
-    id: "1",
-    name: "Uniswap V3 Pool",
-    address: "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
-    tvl: "$8.2M",
-    riskLevel: "low",
-    volatility: "8.2%",
-    chain: "ethereum",
-    status: "monitored",
-    lastUpdate: "2 min ago",
-  },
-  {
-    id: "2",
-    name: "Aave Lending Pool",
-    address: "0x7fc77b5c7614e1533320ea6ddc2eb61fa00a9714",
-    tvl: "$12.1M",
-    riskLevel: "medium",
-    volatility: "15.4%",
-    chain: "polygon",
-    status: "monitored",
-    lastUpdate: "5 min ago",
-  },
-  {
-    id: "3",
-    name: "Curve Finance",
-    address: "0x2d94aa3e47d9d5024503ca8491fce9a2fb4da198",
-    tvl: "$4.2M",
-    riskLevel: "high",
-    volatility: "32.1%",
-    chain: "ethereum",
-    status: "monitored",
-    lastUpdate: "1 min ago",
-  },
-  {
-    id: "4",
-    name: "SushiSwap Pool",
-    address: "0x06da0fd433c1a5d7a4faa01111c044910a184553",
-    tvl: "$2.8M",
-    riskLevel: "low",
-    volatility: "6.5%",
-    chain: "arbitrum",
-    status: "paused",
-    lastUpdate: "1 hour ago",
-  },
-  {
-    id: "5",
-    name: "Compound V3",
-    address: "0xc3d688b66703497daa19211eedff47f25384cdc3",
-    tvl: "$18.5M",
-    riskLevel: "low",
-    volatility: "4.2%",
-    chain: "ethereum",
-    status: "monitored",
-    lastUpdate: "3 min ago",
-  },
-];
+import {
+  addContract,
+  getContracts,
+  runGeminiScan,
+  type DashboardContract,
+} from "@/lib/api";
 
 const getRiskBadge = (level: string) => {
   const normalizedLevel = (level || "low").toLowerCase();
@@ -195,27 +147,29 @@ const getChainInfo = (chain: string) => {
 export default function ContractsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [chainFilter, setChainFilter] = useState("all");
+  const [isScanning, setIsScanning] = useState(false);
+  const [contracts, setContracts] = useState<DashboardContract[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newContract, setNewContract] = useState({
     address: "",
     chain: "ethereum",
     name: "",
   });
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const [contracts, setContracts] = useState<DashboardContract[]>(
-    contractsFallback as DashboardContract[],
-  );
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
 
     const refresh = async () => {
       try {
-        const data = await getContracts();
-        if (data.data.length > 0) {
-          setContracts(data.data);
+        const response = await getContracts();
+        if (response.contracts) {
+          setContracts(response.contracts);
         }
-      } catch {}
+        setIsLoading(false);
+      } catch (err) {
+        console.error("Failed to fetch contracts", err);
+      }
     };
 
     refresh();
@@ -249,12 +203,36 @@ export default function ContractsPage() {
     });
 
     const refreshed = await getContracts();
-    if (refreshed.data.length > 0) {
-      setContracts(refreshed.data);
+    if (refreshed.contracts) {
+      setContracts(refreshed.contracts);
     }
 
     setNewContract({ address: "", chain: "ethereum", name: "" });
     setIsAddDialogOpen(false);
+  };
+
+  const handleGlobalScan = async () => {
+    try {
+      setIsScanning(true);
+      await runGeminiScan();
+      alert("System-wide scan initiated across all registered contracts.");
+    } catch (err) {
+      console.error("Global scan failed", err);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleContractScan = async (address: string) => {
+    try {
+      setIsScanning(true);
+      await runGeminiScan({ contractAddress: address });
+      alert(`Targeted scan initiated for contract ${address}`);
+    } catch (err) {
+      console.error("Contract scan failed", err);
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   const filteredContracts = contracts.filter((contract) => {
@@ -437,9 +415,19 @@ export default function ContractsPage() {
           <Button
             variant="ghost"
             size="icon"
-            className="h-11 w-11 rounded-2xl border border-border/30 hover:bg-muted/50"
+            disabled={isScanning}
+            onClick={handleGlobalScan}
+            className={cn(
+              "h-11 w-11 rounded-2xl border border-border/30 hover:bg-muted/50",
+              isScanning && "animate-pulse border-primary/40 text-primary",
+            )}
           >
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <Zap
+              className={cn(
+                "h-4 w-4",
+                isScanning ? "fill-primary" : "text-muted-foreground",
+              )}
+            />
           </Button>
         </div>
       </motion.div>
@@ -526,6 +514,20 @@ export default function ContractsPage() {
                           View Node
                         </Button>
                       </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={isScanning}
+                        onClick={() => handleContractScan(contract.address)}
+                        className="h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary transition-all"
+                      >
+                        <Zap
+                          className={cn(
+                            "h-4 w-4",
+                            isScanning && "fill-primary",
+                          )}
+                        />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

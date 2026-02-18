@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -32,8 +32,6 @@ import {
   Eye,
   Clock,
   ExternalLink,
-  FileCode2,
-  Shield,
   Mail,
   MessageSquare,
   Bell,
@@ -41,11 +39,17 @@ import {
   ChevronDown,
   Activity,
   ArrowUpRight,
-  ShieldCheck,
   Zap,
   ChevronRight,
 } from "lucide-react";
 import * as framerMotion from "framer-motion";
+import {
+  getAlerts,
+  AlertPayload,
+  acknowledgeAlert,
+  resolveAlert,
+} from "@/lib/api";
+
 const motion =
   (framerMotion as any).motion ||
   (framerMotion as any).default?.motion ||
@@ -53,122 +57,6 @@ const motion =
 const AnimatePresence =
   (framerMotion as any).AnimatePresence ||
   (framerMotion as any).default?.AnimatePresence;
-const alerts = [
-  {
-    id: "1",
-    timestamp: "2 min ago",
-    contract: "Curve Finance",
-    contractAddress: "0x2d94...8b73",
-    type: "Liquidity Drop",
-    message: "Liquidity dropped 25% in the last hour",
-    severity: "high",
-    status: "active",
-    data: {
-      metric: "Liquidity",
-      current: "65%",
-      threshold: "80%",
-      source: "Chainlink Oracle",
-      deviation: "-25%",
-    },
-    aiSummary:
-      "A significant liquidity withdrawal occurred, reducing available liquidity to 65%. This could indicate whale movement or protocol instability. Monitor closely for further withdrawals.",
-    notificationHistory: [
-      { channel: "Email", time: "2 min ago", status: "sent" },
-      { channel: "Slack", time: "2 min ago", status: "sent" },
-    ],
-  },
-  {
-    id: "2",
-    timestamp: "15 min ago",
-    contract: "Aave Lending Pool",
-    contractAddress: "0x7fc7...9e42",
-    type: "Volatility Spike",
-    message: "Market volatility exceeded 25% threshold",
-    severity: "medium",
-    status: "active",
-    data: {
-      metric: "Volatility",
-      current: "28.5%",
-      threshold: "25%",
-      source: "Chainlink Price Feed",
-      deviation: "+3.5%",
-    },
-    aiSummary:
-      "Volatility has increased above your configured threshold, likely due to broader market movements. The spike appears correlated with BTC price action.",
-    notificationHistory: [
-      { channel: "Email", time: "15 min ago", status: "sent" },
-    ],
-  },
-  {
-    id: "3",
-    timestamp: "1 hour ago",
-    contract: "Uniswap V3 Pool",
-    contractAddress: "0x8ad5...3f21",
-    type: "Price Deviation",
-    message: "Price deviated 3.2% from oracle feed",
-    severity: "low",
-    status: "resolved",
-    data: {
-      metric: "Price",
-      current: "$2,891.45",
-      threshold: "$2,847.32",
-      source: "Chainlink/Uniswap TWAP",
-      deviation: "+1.5%",
-    },
-    aiSummary:
-      "Minor price deviation detected between DEX price and oracle feed. This was resolved naturally as arbitrageurs balanced the market.",
-    notificationHistory: [
-      { channel: "Slack", time: "1 hour ago", status: "sent" },
-    ],
-  },
-  {
-    id: "4",
-    timestamp: "3 hours ago",
-    contract: "Curve Finance",
-    contractAddress: "0x2d94...8b73",
-    type: "TVL Change",
-    message: "TVL decreased by 15% in 24 hours",
-    severity: "medium",
-    status: "acknowledged",
-    data: {
-      metric: "TVL",
-      current: "$4.2M",
-      threshold: "10%",
-      source: "On-chain Data",
-      deviation: "-15%",
-    },
-    aiSummary:
-      "Total Value Locked has decreased significantly. This pattern often precedes larger withdrawals. Consider monitoring for potential cascade effects.",
-    notificationHistory: [
-      { channel: "Email", time: "3 hours ago", status: "sent" },
-      { channel: "Telegram", time: "3 hours ago", status: "sent" },
-    ],
-  },
-  {
-    id: "5",
-    timestamp: "6 hours ago",
-    contract: "SushiSwap Pool",
-    contractAddress: "0x06da...4553",
-    type: "Manipulation Risk",
-    message: "Potential sandwich attack detected",
-    severity: "high",
-    status: "resolved",
-    data: {
-      metric: "Transaction Pattern",
-      current: "Suspicious",
-      threshold: "Normal",
-      source: "MEV Analysis",
-      deviation: "Anomaly",
-    },
-    aiSummary:
-      "Our MEV detection system identified a potential sandwich attack pattern. The attack was unsuccessful due to slippage protection on the target transaction.",
-    notificationHistory: [
-      { channel: "Email", time: "6 hours ago", status: "sent" },
-      { channel: "Slack", time: "6 hours ago", status: "sent" },
-      { channel: "Webhook", time: "6 hours ago", status: "sent" },
-    ],
-  },
-];
 
 const getSeverityBadge = (severity: string) => {
   const normalizedSeverity = (severity || "low").toLowerCase();
@@ -217,16 +105,6 @@ const getStatusBadge = (status: string) => {
           ACTIVE
         </Badge>
       );
-    case "acknowledged":
-      return (
-        <Badge
-          variant="outline"
-          className="border-amber-500/30 bg-amber-500/5 text-amber-500 gap-1.5 px-2.5 py-1 text-[11px] font-bold transition-all hover:bg-amber-500/10"
-        >
-          <Eye className="h-3 w-3" />
-          ACKNOWLEDGED
-        </Badge>
-      );
     case "resolved":
     case "complete":
       return (
@@ -256,37 +134,139 @@ const getChannelIcon = (channel: string) => {
       return <Mail className="h-3.5 w-3.5" />;
     case "slack":
       return <MessageSquare className="h-3.5 w-3.5" />;
-    case "telegram":
-      return <Bell className="h-3.5 w-3.5" />;
-    case "webhook":
-      return <ExternalLink className="h-3.5 w-3.5" />;
     default:
       return <Bell className="h-3.5 w-3.5" />;
   }
 };
 
 export default function AlertsPage() {
+  const [data, setData] = useState<AlertPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("all");
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
-  const [selectedAlert, setSelectedAlert] = useState<(typeof alerts)[0] | null>(
-    null,
-  );
+  const [selectedAlert, setSelectedAlert] = useState<any>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const filteredAlerts = alerts.filter((alert) => {
+  const handleAcknowledge = async (id: string) => {
+    try {
+      setActionLoading(true);
+      await acknowledgeAlert(id);
+      // Refresh local data or mark as acknowledged locally
+      setData((prev: any) => ({
+        ...prev,
+        alerts: prev.alerts.map((a: any) =>
+          a.id === id ? { ...a, acknowledged: true } : a,
+        ),
+      }));
+    } catch (err) {
+      console.error("Failed to acknowledge alert", err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleResolve = async (id: string) => {
+    try {
+      setActionLoading(true);
+      await resolveAlert(id);
+      // Refresh local data
+      setData((prev: any) => ({
+        ...prev,
+        alerts: prev.alerts.map((a: any) =>
+          a.id === id
+            ? { ...a, resolved: true, resolvedAt: new Date().toISOString() }
+            : a,
+        ),
+      }));
+      setSelectedAlert(null);
+    } catch (err) {
+      console.error("Failed to resolve alert", err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const result = await getAlerts(
+          undefined,
+          severityFilter === "all" ? undefined : severityFilter.toUpperCase(),
+        );
+        setData(result);
+      } catch (err) {
+        console.error("Failed to fetch alerts", err);
+        setError("System offline.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+    const interval = setInterval(fetchData, 15000);
+    return () => clearInterval(interval);
+  }, [severityFilter]);
+
+  if (loading && !data) {
+    return (
+      <div className="flex bg-slate-900 h-[80vh] items-center justify-center rounded-3xl m-6 border border-slate-800 shadow-2xl">
+        <div className="text-center space-y-6 max-w-md px-10">
+          <div className="mx-auto w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+            <Activity className="h-10 w-10 text-primary animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-white uppercase tracking-tighter italic">
+              Synchronizing...
+            </h2>
+            <p className="text-slate-400 font-medium font-mono text-xs">
+              Initializing neural link to Chainlink DON...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const rawAlerts = data?.alerts || [];
+
+  // Map backend alerts to frontend UI model
+  const alerts = rawAlerts.map((a: any) => ({
+    id: a.id,
+    timestamp: new Date(a.timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+    contract: a.details?.contractName || "System Alert",
+    contractAddress: a.contractAddress || "0x0",
+    type: a.message.split(":")[0] || "Anomaly",
+    message: a.message,
+    severity: a.severity.toLowerCase(),
+    status: a.resolved ? "resolved" : "active",
+    data: a.details || {},
+    aiSummary:
+      a.details?.aiSummary || "Chainlink Sentinel is analyzing the signal...",
+    notificationHistory: [
+      { channel: "Email", time: "Connected", status: "sent" },
+    ],
+  }));
+
+  const filteredAlerts = alerts.filter((alert: any) => {
     const matchesSearch =
       alert.contract.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alert.message.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSeverity =
-      severityFilter === "all" || alert.severity === severityFilter;
+      alert.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      alert.contractAddress.toLowerCase().includes(searchQuery.toLowerCase());
+
     const matchesStatus =
       statusFilter === "all" || alert.status === statusFilter;
-    return matchesSearch && matchesSeverity && matchesStatus;
+
+    return matchesSearch && matchesStatus;
   });
 
-  const activeCount = alerts.filter((a) => a.status === "active").length;
+  const activeCount = alerts.filter((a: any) => a.status === "active").length;
 
   return (
     <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
@@ -364,7 +344,7 @@ export default function AlertsPage() {
               <select
                 value={severityFilter}
                 onChange={(e) => setSeverityFilter(e.target.value)}
-                className="h-11 appearance-none rounded-2xl border border-border/40 bg-background/40 pl-9 pr-8 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all"
+                className="h-11 appearance-none rounded-2xl border border-border/40 bg-background/40 pl-9 pr-8 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all text-foreground"
               >
                 <option value="all">Criticality: All</option>
                 <option value="high">High Severity</option>
@@ -378,11 +358,10 @@ export default function AlertsPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-11 appearance-none rounded-2xl border border-border/40 bg-background/40 pl-9 pr-8 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all"
+                className="h-11 appearance-none rounded-2xl border border-border/40 bg-background/40 pl-9 pr-8 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all text-foreground"
               >
                 <option value="all">Status: Global</option>
                 <option value="active">Active Threats</option>
-                <option value="acknowledged">Under Review</option>
                 <option value="resolved">Archived / Resolved</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -427,7 +406,7 @@ export default function AlertsPage() {
             exit={{ opacity: 0 }}
             className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
           >
-            {filteredAlerts.map((alert, index) => (
+            {filteredAlerts.map((alert: any, index: number) => (
               <motion.div
                 key={alert.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -448,7 +427,8 @@ export default function AlertsPage() {
                       <div
                         className={cn(
                           "flex h-12 w-12 items-center justify-center rounded-2xl transition-all group-hover:scale-110",
-                          alert.severity === "high"
+                          alert.severity === "high" ||
+                            alert.severity === "critical"
                             ? "bg-rose-500/10 text-rose-500"
                             : alert.severity === "medium"
                               ? "bg-amber-500/10 text-amber-500"
@@ -484,7 +464,7 @@ export default function AlertsPage() {
                     <div className="mt-6 flex items-center justify-between border-t border-border/40 pt-6">
                       {getStatusBadge(alert.status)}
                       <div className="flex items-center -space-x-2">
-                        {alert.notificationHistory.map((n, i) => (
+                        {alert.notificationHistory.map((n: any, i: number) => (
                           <div
                             key={i}
                             className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-muted text-muted-foreground shadow-sm"
@@ -528,7 +508,7 @@ export default function AlertsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredAlerts.map((alert) => (
+                {filteredAlerts.map((alert: any) => (
                   <TableRow
                     key={alert.id}
                     className="group border-border/20 cursor-pointer hover:bg-primary/[0.03] transition-all"
@@ -579,13 +559,14 @@ export default function AlertsPage() {
       >
         <SheetContent className="w-full sm:max-w-xl border-l-border/40 bg-card/90 backdrop-blur-2xl p-0">
           {selectedAlert && (
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full overflow-hidden">
               <div className="px-8 py-10 border-b border-border/40">
                 <div className="flex items-center justify-between mb-8">
                   <div
                     className={cn(
                       "flex h-14 w-14 items-center justify-center rounded-2xl shadow-xl",
-                      selectedAlert.severity === "high"
+                      selectedAlert.severity === "high" ||
+                        selectedAlert.severity === "critical"
                         ? "bg-rose-500 shadow-rose-500/20 text-white"
                         : selectedAlert.severity === "medium"
                           ? "bg-amber-500 shadow-amber-500/20 text-white"
@@ -599,7 +580,7 @@ export default function AlertsPage() {
                       Alert Reference
                     </p>
                     <p className="font-mono text-xs font-bold text-foreground">
-                      #{selectedAlert.id.padStart(6, "0")}
+                      #{selectedAlert.id}
                     </p>
                   </div>
                 </div>
@@ -642,7 +623,7 @@ export default function AlertsPage() {
                       variant="outline"
                       className="border-primary/30 text-primary text-[10px] font-bold bg-background/50"
                     >
-                      GPT-4o Optimized
+                      Real-time Intelligence
                     </Badge>
                   </div>
                   <p className="text-sm font-medium leading-relaxed text-foreground">
@@ -653,15 +634,10 @@ export default function AlertsPage() {
                       size="sm"
                       variant="outline"
                       className="h-9 rounded-xl border-primary/30 text-xs font-bold text-primary hover:bg-primary/10"
+                      disabled={actionLoading}
+                      onClick={() => handleResolve(selectedAlert.id)}
                     >
-                      Mitigation Strategy
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-9 rounded-xl text-xs font-bold text-muted-foreground"
-                    >
-                      Detailed Trace
+                      {actionLoading ? "Mitigating..." : "Mitigation Strategy"}
                     </Button>
                   </div>
                 </section>
@@ -671,68 +647,81 @@ export default function AlertsPage() {
                     Telemetry Metrics
                   </h4>
                   <div className="grid grid-cols-2 gap-4">
-                    {Object.entries(selectedAlert.data).map(([key, value]) => (
-                      <div
-                        key={key}
-                        className="rounded-2xl border border-border/40 bg-muted/10 p-4"
-                      >
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">
-                          {key}
-                        </p>
-                        <p className="text-sm font-black text-foreground tabular-nums">
-                          {value}
-                        </p>
-                      </div>
-                    ))}
+                    {Object.entries(selectedAlert.data).map(
+                      ([key, value]: [string, any]) => (
+                        <div
+                          key={key}
+                          className="rounded-2xl border border-border/40 bg-muted/10 p-4"
+                        >
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">
+                            {key}
+                          </p>
+                          <p className="text-sm font-black text-foreground tabular-nums truncate">
+                            {String(value)}
+                          </p>
+                        </div>
+                      ),
+                    )}
                   </div>
                 </section>
 
-                <section className="space-y-4">
+                <section className="space-y-4 pb-10">
                   <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
                     Notification Dispatch
                   </h4>
                   <div className="space-y-3">
-                    {selectedAlert.notificationHistory.map((n, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between rounded-2xl border border-border/40 px-4 py-3"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted/40 text-muted-foreground">
-                            {getChannelIcon(n.channel)}
+                    {selectedAlert.notificationHistory.map(
+                      (n: any, i: number) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between rounded-2xl border border-border/40 px-4 py-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted/40 text-muted-foreground">
+                              {getChannelIcon(n.channel)}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-foreground">
+                                {n.channel}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground uppercase">
+                                {n.time}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-xs font-bold text-foreground">
-                              {n.channel}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground uppercase">
-                              {n.time}
-                            </p>
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase">
+                              Delivered
+                            </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                          <span className="text-[10px] font-bold text-emerald-500 uppercase">
-                            Delivered
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      ),
+                    )}
                   </div>
                 </section>
               </div>
 
               <div className="p-8 border-t border-border/40 bg-muted/10">
                 <div className="flex gap-4">
-                  <Button className="flex-1 h-12 rounded-xl bg-primary font-bold shadow-lg shadow-primary/20 group">
-                    Acknowledge Threat
-                    <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  <Button
+                    className="flex-1 h-12 rounded-xl bg-primary font-bold shadow-lg shadow-primary/20 group"
+                    disabled={
+                      actionLoading || selectedAlert.status === "resolved"
+                    }
+                    onClick={() => handleAcknowledge(selectedAlert.id)}
+                  >
+                    {actionLoading ? "Processing..." : "Acknowledge Threat"}
+                    {!actionLoading && (
+                      <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    )}
                   </Button>
                   <Button
                     variant="outline"
                     className="flex-1 h-12 rounded-xl border-border/40 font-bold"
+                    onClick={() => setSelectedAlert(null)}
                   >
-                    Ignore Pattern
+                    Close Feed
                   </Button>
                 </div>
               </div>
