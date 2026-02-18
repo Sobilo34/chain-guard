@@ -13,7 +13,14 @@ import {
   Lock,
   Globe,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import * as framerMotion from "framer-motion";
+const motion =
+  (framerMotion as any).motion ||
+  (framerMotion as any).default?.motion ||
+  (framerMotion as any).default;
+const AnimatePresence =
+  (framerMotion as any).AnimatePresence ||
+  (framerMotion as any).default?.AnimatePresence;
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 

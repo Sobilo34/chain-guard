@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import * as framerMotion from "framer-motion";
+const motion =
+  (framerMotion as any).motion ||
+  (framerMotion as any).default?.motion ||
+  (framerMotion as any).default;
+const AnimatePresence =
+  (framerMotion as any).AnimatePresence ||
+  (framerMotion as any).default?.AnimatePresence;
+import { cn } from "@/lib/utils";
+// Force refresh
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +36,11 @@ import {
   ExternalLink,
   MoreVertical,
   ChevronDown,
+  Globe,
+  Activity,
+  ShieldCheck,
+  Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import { addContract, getContracts, type DashboardContract } from "@/lib/api";
 
@@ -88,53 +103,93 @@ const contractsFallback = [
 ];
 
 const getRiskBadge = (level: string) => {
-  switch (level) {
+  const normalizedLevel = (level || "low").toLowerCase();
+  switch (normalizedLevel) {
     case "low":
+    case "min":
       return (
-        <Badge className="bg-success/10 text-success hover:bg-success/20 border-0">
+        <Badge className="bg-emerald-500/10 text-emerald-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase">
           Low Risk
         </Badge>
       );
     case "medium":
+    case "med":
       return (
-        <Badge className="bg-warning/10 text-warning hover:bg-warning/20 border-0">
+        <Badge className="bg-amber-500/10 text-amber-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase">
           Medium Risk
         </Badge>
       );
     case "high":
+    case "crit":
       return (
-        <Badge className="bg-danger/10 text-danger hover:bg-danger/20 border-0">
+        <Badge className="bg-rose-500/10 text-rose-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase">
           High Risk
         </Badge>
       );
     default:
-      return <Badge variant="secondary">Unknown</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="rounded-full text-[10px] font-bold uppercase tracking-wider"
+        >
+          Unknown
+        </Badge>
+      );
   }
 };
 
-const getStatusBadge = (status: string) => {
-  switch (status) {
+const getStatusBadge = (status: string | undefined) => {
+  const normalizedStatus = (status || "monitored").toLowerCase();
+  switch (normalizedStatus) {
     case "monitored":
+    case "active":
       return (
-        <Badge className="bg-success/10 text-success border-0">Monitored</Badge>
+        <div className="flex items-center gap-1.5 text-emerald-500">
+          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-[11px] font-bold uppercase tracking-tight">
+            Active Scan
+          </span>
+        </div>
       );
     case "paused":
       return (
-        <Badge className="bg-warning/10 text-warning border-0">Paused</Badge>
+        <div className="flex items-center gap-1.5 text-amber-500">
+          <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+          <span className="text-[11px] font-bold uppercase tracking-tight">
+            Paused
+          </span>
+        </div>
       );
     default:
-      return <Badge variant="secondary">Unknown</Badge>;
+      return (
+        <div className="flex items-center gap-1.5 text-muted-foreground">
+          <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
+          <span className="text-[11px] font-bold uppercase tracking-tight">
+            {status}
+          </span>
+        </div>
+      );
   }
 };
 
 const getChainInfo = (chain: string) => {
-  const chains: Record<string, { color: string; name: string }> = {
-    ethereum: { color: "#627EEA", name: "Ethereum" },
-    polygon: { color: "#8247E5", name: "Polygon" },
-    arbitrum: { color: "#28A0F0", name: "Arbitrum" },
-    optimism: { color: "#FF0420", name: "Optimism" },
+  const normalizedChain = chain.toLowerCase();
+  const chains: Record<
+    string,
+    { color: string; name: string; symbol: string }
+  > = {
+    ethereum: { color: "#627EEA", name: "Ethereum", symbol: "ETH" },
+    polygon: { color: "#8247E5", name: "Polygon", symbol: "MATIC" },
+    arbitrum: { color: "#28A0F0", name: "Arbitrum", symbol: "ARB" },
+    optimism: { color: "#FF0420", name: "Optimism", symbol: "OP" },
   };
-  return chains[chain] || { color: "#888", name: chain };
+  return (
+    chains[normalizedChain] || {
+      color: "#888",
+      name: chain,
+      symbol: chain.slice(0, 3).toUpperCase(),
+    }
+  );
 };
 
 export default function ContractsPage() {
@@ -216,300 +271,288 @@ export default function ContractsPage() {
   };
 
   return (
-    <div className="p-4 lg:p-6">
+    <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
       {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Contracts
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="space-y-1.5"
+        >
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold tracking-wider text-primary uppercase">
+            <Globe className="h-3 w-3" />
+            Ecosystem Registry
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground lg:text-4xl">
+            Monitored Assets<span className="text-primary italic">.</span>
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage and monitor your smart contracts
+          <p className="max-w-xl text-muted-foreground">
+            Centralized management for all your smart contracts across multiple
+            chains.
           </p>
-        </div>
+        </motion.div>
+
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Add Contract
+            <Button
+              size="lg"
+              className="h-12 rounded-2xl bg-primary px-8 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Register Contract
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md rounded-3xl border-border/40 bg-card/90 backdrop-blur-2xl">
             <DialogHeader>
-              <DialogTitle>Add New Contract</DialogTitle>
-              <DialogDescription>
-                Enter the contract address and select the chain to start
-                monitoring.
+              <DialogTitle className="text-xl font-bold">
+                Register New Contract
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground">
+                Enter the contract metadata to begin automated indexing.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-5 py-6">
               <div className="space-y-2">
-                <Label htmlFor="name">Contract Name (Optional)</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., My DeFi Pool"
-                  value={newContract.name}
-                  onChange={(e) =>
-                    setNewContract({ ...newContract, name: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Contract Address</Label>
-                <Input
-                  id="address"
-                  placeholder="0x..."
-                  className="font-mono"
-                  value={newContract.address}
-                  onChange={(e) =>
-                    setNewContract({ ...newContract, address: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="chain">Chain</Label>
+                <Label
+                  htmlFor="address"
+                  className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                >
+                  On-Chain Address
+                </Label>
                 <div className="relative">
-                  <select
-                    id="chain"
-                    value={newContract.chain}
+                  <FileCode2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="address"
+                    placeholder="0x..."
+                    className="h-12 rounded-xl border-border/40 bg-muted/30 pl-10 font-mono text-sm focus-visible:ring-primary/20 transition-all"
+                    value={newContract.address}
                     onChange={(e) =>
-                      setNewContract({ ...newContract, chain: e.target.value })
+                      setNewContract({
+                        ...newContract,
+                        address: e.target.value,
+                      })
                     }
-                    className="h-10 w-full appearance-none rounded-md border border-input bg-background px-3 pr-8 text-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="name"
+                    className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
                   >
-                    <option value="ethereum">Ethereum</option>
-                    <option value="polygon">Polygon</option>
-                    <option value="arbitrum">Arbitrum</option>
-                    <option value="optimism">Optimism</option>
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    Internal Label
+                  </Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g., Vault V1"
+                    className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                    value={newContract.name}
+                    onChange={(e) =>
+                      setNewContract({ ...newContract, name: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="chain"
+                    className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                  >
+                    Network
+                  </Label>
+                  <div className="relative">
+                    <select
+                      id="chain"
+                      value={newContract.chain}
+                      onChange={(e) =>
+                        setNewContract({
+                          ...newContract,
+                          chain: e.target.value,
+                        })
+                      }
+                      className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      <option value="ethereum">Ethereum</option>
+                      <option value="polygon">Polygon</option>
+                      <option value="arbitrum">Arbitrum</option>
+                      <option value="optimism">Optimism</option>
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  </div>
                 </div>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:justify-between">
               <Button
-                variant="outline"
+                variant="ghost"
+                className="rounded-xl font-bold"
                 onClick={() => setIsAddDialogOpen(false)}
               >
-                Cancel
+                Dismiss
               </Button>
-              <Button onClick={handleAddContract}>Start Monitoring</Button>
+              <Button
+                className="rounded-xl px-8 font-bold bg-primary hover:bg-primary/90"
+                onClick={handleAddContract}
+              >
+                Begin Indexing
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Filters */}
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      {/* Filters Hub */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="flex flex-col gap-4 rounded-3xl border border-border/40 bg-card/30 p-4 backdrop-blur-md sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="relative group flex-1">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
           <Input
-            placeholder="Search by name or address..."
+            placeholder="Search by name, address or hash..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="h-11 border-border/40 bg-background/40 pl-10 text-[13px] rounded-2xl focus-visible:ring-primary/10 transition-all"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-3">
           <div className="relative">
+            <Filter className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <select
               value={chainFilter}
               onChange={(e) => setChainFilter(e.target.value)}
-              className="h-10 w-36 appearance-none rounded-md border border-input bg-background px-3 pr-8 text-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-11 appearance-none rounded-2xl border border-border/40 bg-background/40 pl-9 pr-8 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all"
             >
-              <option value="all">All Chains</option>
-              <option value="ethereum">Ethereum</option>
+              <option value="all">All Networks</option>
+              <option value="ethereum">Mainnet (Ethereum)</option>
               <option value="polygon">Polygon</option>
               <option value="arbitrum">Arbitrum</option>
               <option value="optimism">Optimism</option>
             </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
+          <div className="h-11 w-px bg-border/40 hidden sm:block" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-11 w-11 rounded-2xl border border-border/30 hover:bg-muted/50"
+          >
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
       {/* Contracts Grid */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {filteredContracts.map((contract) => {
-          const chainInfo = getChainInfo(contract.chain);
-          return (
-            <Card
-              key={contract.id}
-              className="border-border/50 transition-shadow hover:shadow-md"
-            >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <FileCode2 className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base font-semibold">
-                        {contract.name}
-                      </CardTitle>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: chainInfo.color }}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {chainInfo.name}
-                        </span>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <AnimatePresence mode="popLayout">
+          {filteredContracts.map((contract, index) => {
+            const chain = getChainInfo(contract.chain || "ethereum");
+            return (
+              <motion.div
+                key={contract.address}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ delay: index * 0.05 }}
+                layout
+              >
+                <Card className="group relative h-full overflow-hidden rounded-[2rem] border-border/40 bg-card/40 backdrop-blur-xl transition-all hover:border-primary/40 hover:shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:hover:shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+                  <div className="absolute right-0 top-0 h-40 w-40 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+                  <CardHeader className="p-7">
+                    <div className="flex items-start justify-between">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/40 shadow-inner group-hover:scale-110 group-hover:bg-primary/10 transition-all duration-500">
+                        <FileCode2 className="h-7 w-7 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="flex items-center gap-1.5 rounded-full border border-border/40 bg-background/50 px-2.5 py-1 backdrop-blur-md">
+                          <div
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: chain.color }}
+                          />
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            {chain.symbol}
+                          </span>
+                        </div>
+                        {getRiskBadge(contract.riskLevel || "low")}
                       </div>
                     </div>
-                  </div>
-                  <div className="relative">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() =>
-                        setMenuOpen(
-                          menuOpen === contract.id ? null : contract.id,
-                        )
-                      }
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                    {menuOpen === contract.id && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setMenuOpen(null)}
-                        />
-                        <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-md border border-border bg-popover p-1 shadow-lg">
-                          <Link
-                            href={`/dashboard/contracts/${contract.id}`}
-                            className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                            onClick={() => setMenuOpen(null)}
-                          >
-                            View Details
-                          </Link>
-                          <button
-                            className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                            onClick={() => setMenuOpen(null)}
-                          >
-                            Configure Alerts
-                          </button>
-                          <button
-                            className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                            onClick={() => setMenuOpen(null)}
-                          >
-                            Pause Monitoring
-                          </button>
-                          <button
-                            className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm text-danger hover:bg-accent"
-                            onClick={() => setMenuOpen(null)}
-                          >
-                            Remove Contract
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Address */}
-                <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
-                  <code className="text-xs text-muted-foreground">
-                    {contract.address.slice(0, 10)}...
-                    {contract.address.slice(-8)}
-                  </code>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() => copyToClipboard(contract.address)}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      asChild
-                    >
-                      <a
-                        href={`https://etherscan.io/address/${contract.address}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    <div className="mt-6 space-y-1">
+                      <CardTitle className="text-xl font-bold tracking-tight group-hover:text-primary transition-colors line-clamp-1">
+                        {contract.name}
+                      </CardTitle>
+                      <button
+                        onClick={() => copyToClipboard(contract.address)}
+                        className="flex items-center gap-2 font-mono text-xs text-muted-foreground hover:text-foreground transition-colors group/addr"
                       >
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </Button>
-                  </div>
-                </div>
+                        {contract.address.slice(0, 10)}...
+                        {contract.address.slice(-8)}
+                        <Copy className="h-3 w-3 opacity-0 group-hover/addr:opacity-100 transition-opacity" />
+                      </button>
+                    </div>
+                  </CardHeader>
 
-                {/* Metrics */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-muted-foreground">TVL</p>
-                    <p className="text-sm font-semibold text-success">
-                      {contract.tvl}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Volatility</p>
-                    <p className="text-sm font-semibold">
-                      {contract.volatility}
-                    </p>
-                  </div>
-                </div>
+                  <CardContent className="px-7 pb-4">
+                    <div className="grid grid-cols-2 gap-4 rounded-2xl bg-muted/30 p-4 border border-border/20">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest mb-0.5">
+                          Total Value
+                        </p>
+                        <p className="text-lg font-black tracking-tighter tabular-nums">
+                          {contract.tvl || "$0.00"}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest mb-0.5">
+                          Volatility
+                        </p>
+                        <p className="text-lg font-black tracking-tighter text-emerald-500 tabular-nums">
+                          {contract.volatility || "0.0%"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
 
-                {/* Status & Risk */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="px-7 pb-7 flex items-center justify-between">
                     {getStatusBadge(contract.status)}
-                    {getRiskBadge(contract.riskLevel)}
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/dashboard/contracts/${contract.id || contract.address}`}
+                        passHref
+                      >
+                        <Button className="rounded-xl border-border/40 bg-background/50 font-bold hover:bg-primary/10 hover:text-primary transition-all">
+                          View Node
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-10 w-10 rounded-xl hover:bg-rose-500/10 hover:text-rose-500 transition-all"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {contract.lastUpdate}
-                  </span>
-                </div>
-
-                {/* Action */}
-                <Button
-                  variant="outline"
-                  className="w-full gap-2 bg-transparent"
-                  asChild
-                >
-                  <Link href={`/dashboard/contracts/${contract.id}`}>
-                    View Details
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Empty State */}
-      {filteredContracts.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-            <FileCode2 className="h-8 w-8 text-muted-foreground" />
+                </Card>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+        {filteredContracts.length === 0 && (
+          <div className="col-span-full flex h-80 flex-col items-center justify-center rounded-[2rem] border-2 border-dashed border-border/40 bg-muted/10 opacity-60">
+            <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-muted/40 mb-4">
+              <ShieldCheck className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-bold">No Contracts Found</h3>
+            <p className="text-sm text-muted-foreground mt-1 text-center max-w-xs">
+              Refine your search parameters or register a new contract to start
+              monitoring.
+            </p>
           </div>
-          <h3 className="mt-4 text-lg font-semibold">No contracts found</h3>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {searchQuery || chainFilter !== "all"
-              ? "Try adjusting your search or filters"
-              : "Add your first contract to start monitoring"}
-          </p>
-          {!searchQuery && chainFilter === "all" && (
-            <Button
-              className="mt-4 gap-2"
-              onClick={() => setIsAddDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Add Contract
-            </Button>
-          )}
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+import * as framerMotion from "framer-motion";
+const motion =
+  (framerMotion as any).motion ||
+  (framerMotion as any).default?.motion ||
+  (framerMotion as any).default;
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +32,7 @@ import {
   Clock,
   ChevronRight,
   Zap,
+  RefreshCw,
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import {
@@ -144,77 +151,97 @@ const recentAlerts = [
 ];
 
 const getRiskBadge = (level: string) => {
-  switch (level) {
+  const normalizedLevel = level.toLowerCase();
+  switch (normalizedLevel) {
     case "low":
+    case "min":
       return (
-        <Badge className="bg-success/10 text-success hover:bg-success/20 border-0">
+        <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-0 rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider">
           Low Risk
         </Badge>
       );
     case "medium":
+    case "med":
       return (
-        <Badge className="bg-warning/10 text-warning hover:bg-warning/20 border-0">
+        <Badge className="bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border-0 rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider">
           Medium Risk
         </Badge>
       );
     case "high":
+    case "crit":
       return (
-        <Badge className="bg-danger/10 text-danger hover:bg-danger/20 border-0">
+        <Badge className="bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 border-0 rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider">
           High Risk
         </Badge>
       );
     default:
-      return <Badge variant="secondary">Unknown</Badge>;
+      return (
+        <Badge className="bg-muted text-muted-foreground border-0 rounded-full px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider">
+          Unknown
+        </Badge>
+      );
   }
 };
 
 const getSeverityBadge = (severity: string) => {
-  switch (severity) {
+  const normalizedSeverity = severity.toLowerCase();
+  switch (normalizedSeverity) {
     case "low":
       return (
-        <Badge className="bg-success/10 text-success hover:bg-success/20 border-0">
-          Low
+        <Badge className="bg-emerald-500/10 text-emerald-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold">
+          LOW
         </Badge>
       );
     case "medium":
       return (
-        <Badge className="bg-warning/10 text-warning hover:bg-warning/20 border-0">
-          Medium
+        <Badge className="bg-amber-500/10 text-amber-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold">
+          MEDIUM
         </Badge>
       );
     case "high":
+    case "critical":
       return (
-        <Badge className="bg-danger/10 text-danger hover:bg-danger/20 border-0">
-          High
+        <Badge className="bg-rose-500/10 text-rose-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold">
+          HIGH
         </Badge>
       );
     default:
-      return <Badge variant="secondary">Unknown</Badge>;
+      return (
+        <Badge className="bg-muted text-muted-foreground border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold">
+          -
+        </Badge>
+      );
   }
 };
 
 const getStatusBadge = (status: string) => {
-  switch (status) {
+  const normalizedStatus = status.toLowerCase();
+  switch (normalizedStatus) {
     case "active":
       return (
-        <Badge variant="outline" className="border-danger/50 text-danger">
+        <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg px-2 py-0.5 text-[10px] font-medium">
           Active
         </Badge>
       );
     case "acknowledged":
       return (
-        <Badge variant="outline" className="border-warning/50 text-warning">
+        <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-lg px-2 py-0.5 text-[10px] font-medium">
           Acknowledged
         </Badge>
       );
     case "resolved":
+    case "complete":
       return (
-        <Badge variant="outline" className="border-success/50 text-success">
+        <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg px-2 py-0.5 text-[10px] font-medium">
           Resolved
         </Badge>
       );
     default:
-      return <Badge variant="outline">Unknown</Badge>;
+      return (
+        <Badge className="bg-slate-500/10 text-slate-500 border border-slate-500/20 rounded-lg px-2 py-0.5 text-[10px] font-medium">
+          {status}
+        </Badge>
+      );
   }
 };
 
@@ -384,307 +411,322 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="p-4 lg:p-6">
-      {/* Hero Section */}
-      <div className="mb-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Welcome back
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Monitor your smart contracts and stay ahead of market risks
-            </p>
+    <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
+      {/* Hero / Header Section */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="space-y-1.5"
+        >
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold tracking-wider text-primary uppercase">
+            <Zap className="h-3 w-3 fill-primary" />
+            Live Intelligence
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 bg-transparent"
-              onClick={handleQuickScan}
-              disabled={isScanning}
-            >
-              <Zap className="h-4 w-4" />
-              {isScanning ? "Scanning..." : "Quick Scan"}
-            </Button>
-            <Button size="sm" className="gap-2" asChild>
-              <Link href="/dashboard/contracts">
-                <Plus className="h-4 w-4" />
-                Add Contract
-              </Link>
-            </Button>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground lg:text-4xl">
+            Command Center<span className="text-primary italic">.</span>
+          </h1>
+          <p className="max-w-2xl text-muted-foreground">
+            End-to-end security monitoring for your on-chain assets powered by
+            Chainlink & Gemini LLM.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-wrap items-center gap-3"
+        >
+          <div className="hidden h-10 items-center gap-4 rounded-2xl border border-border/40 bg-muted/20 px-4 xl:flex">
+            <div className="flex items-center gap-2 border-r border-border/40 pr-4">
+              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-xs font-semibold text-foreground/80">
+                Oracle: Online
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                Sync: {systemStatus.lastSync}
+              </span>
+            </div>
           </div>
-        </div>
-        {scanMessage ? (
-          <p className="mt-2 text-xs text-muted-foreground">{scanMessage}</p>
-        ) : null}
+          <Button
+            size="lg"
+            variant="outline"
+            disabled={isScanning}
+            onClick={handleQuickScan}
+            className="h-12 rounded-2xl border-border/60 bg-background/50 backdrop-blur-md transition-all hover:border-primary/50 hover:bg-primary/5"
+          >
+            <RefreshCw
+              className={cn(
+                "mr-2 h-4 w-4 text-primary",
+                isScanning && "animate-spin",
+              )}
+            />
+            {isScanning ? "Scanning Ecosystem..." : "Force Scan"}
+          </Button>
+          <Button
+            size="lg"
+            className="h-12 rounded-2xl bg-primary px-6 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            Add Contract
+          </Button>
+        </motion.div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {liveKpis.map((kpi) => (
-          <Card
+      {/* KPI GRID */}
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        {liveKpis.map((kpi, index) => (
+          <motion.div
             key={kpi.title}
-            className="border-border/50 transition-shadow hover:shadow-md"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
           >
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {kpi.title}
-                  </p>
-                  <p className="mt-1 text-2xl font-bold text-foreground">
-                    {kpi.value}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {kpi.change}
-                  </p>
-                </div>
+            <Card className="group relative overflow-hidden rounded-3xl border-border/40 bg-card/40 backdrop-blur-xl transition-all hover:border-primary/30 hover:shadow-2xl hover:shadow-primary/5">
+              <div
+                className={cn(
+                  "absolute -right-4 -top-4 h-24 w-24 rounded-full blur-3xl transition-opacity group-hover:opacity-100 opacity-40",
+                  kpi.bgColor,
+                )}
+              />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-[13px] font-bold tracking-tight text-muted-foreground uppercase">
+                  {kpi.title}
+                </CardTitle>
                 <div
-                  className={`flex h-10 w-10 items-center justify-center rounded-lg ${kpi.bgColor}`}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-xl",
+                    kpi.bgColor,
+                  )}
                 >
-                  <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
+                  <kpi.icon className={cn("h-4 w-4", kpi.color)} />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-black tabular-nums tracking-tight text-foreground">
+                  {kpi.value}
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium brightness-110">
+                  <span className={cn("flex items-center gap-0.5", kpi.color)}>
+                    <ChevronRight className="h-3 w-3" />
+                    {kpi.change}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
       </div>
 
-      {/* Charts Section */}
-      <DashboardCharts />
-
-      {/* Main Content Grid */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {/* Monitored Contracts */}
-        <div className="lg:col-span-2">
-          <Card className="border-border/50">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <CardTitle className="text-base font-semibold">
-                Monitored Contracts
-              </CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1 text-primary"
-                asChild
-              >
-                <Link href="/dashboard/contracts">
-                  View all
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
-              </Button>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        {/* Monitored Assets Table */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="lg:col-span-2"
+        >
+          <Card className="h-full rounded-3xl border-border/40 bg-card/40 backdrop-blur-xl">
+            <CardHeader className="flex flex-row items-center justify-between px-8 py-7">
+              <div>
+                <CardTitle className="text-xl font-bold tracking-tight">
+                  Monitored Assets
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Real-time status of tracked smart contracts.
+                </p>
+              </div>
+              <div className="relative w-full max-w-xs group">
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
+                <Input
+                  placeholder="Filter contracts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-10 rounded-2xl border-border/40 bg-muted/30 pl-10 text-[13px] focus-visible:ring-primary/20"
+                />
+              </div>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="px-4 pb-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search contracts..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="h-9 pl-9"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1 px-2 pb-2">
-                {filteredContracts.map((contract) => (
-                  <Link
-                    key={contract.id}
-                    href={`/dashboard/contracts/${contract.id}`}
-                    className="flex items-center justify-between rounded-lg p-3 transition-colors hover:bg-muted/50"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                        <FileCode2 className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">
-                          {contract.name}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <code className="text-xs text-muted-foreground">
-                            {contract.address}
-                          </code>
-                          {getChainBadge(contract.chain)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="hidden text-right sm:block">
-                        <p className="text-sm font-medium text-success">
-                          {contract.tvl}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Vol: {contract.volatility}
-                        </p>
-                      </div>
-                      {getRiskBadge(contract.riskLevel)}
-                      <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Quick Actions Sidebar */}
-        <div className="space-y-6">
-          {/* Quick Actions */}
-          <Card className="border-border/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2 bg-transparent"
-                asChild
-              >
-                <Link href="/dashboard/contracts">
-                  <Plus className="h-4 w-4" />
-                  Add New Contract
-                </Link>
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2 bg-transparent"
-                asChild
-              >
-                <Link href="/dashboard/settings">
-                  <Activity className="h-4 w-4" />
-                  Configure Alerts
-                </Link>
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full justify-start gap-2 bg-transparent"
-              >
-                <TrendingUp className="h-4 w-4" />
-                View Reports
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* System Status */}
-          <Card className="border-border/50">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">
-                System Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Chainlink Oracle
-                </span>
-                <span className="flex items-center gap-1.5 text-sm text-success">
-                  <span className="h-2 w-2 rounded-full bg-success" />
-                  {formatSystemState(systemStatus.oracle)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Risk Engine
-                </span>
-                <span className="flex items-center gap-1.5 text-sm text-success">
-                  <span className="h-2 w-2 rounded-full bg-success" />
-                  {formatSystemState(systemStatus.riskEngine)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Alert Service
-                </span>
-                <span className="flex items-center gap-1.5 text-sm text-success">
-                  <span className="h-2 w-2 rounded-full bg-success" />
-                  {formatSystemState(systemStatus.alertService)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Last Sync</span>
-                <span className="text-sm text-muted-foreground">
-                  {formatLastSync(systemStatus.lastSync)}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-
-      {/* Recent Alerts Table */}
-      <Card className="mt-6 border-border/50">
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
-          <CardTitle className="text-base font-semibold">
-            Recent Alerts
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1 text-primary"
-            asChild
-          >
-            <Link href="/dashboard/alerts">
-              View all
-              <ChevronRight className="h-4 w-4" />
-            </Link>
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-6">
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    Timestamp
-                  </div>
-                </TableHead>
-                <TableHead>Contract</TableHead>
-                <TableHead>Risk Type</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="pr-6 text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {liveAlerts.map((alert) => (
-                <TableRow key={alert.id} className="group">
-                  <TableCell className="pl-6 text-muted-foreground">
-                    {alert.timestamp}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {alert.contract}
-                  </TableCell>
-                  <TableCell>
-                    <span className="flex items-center gap-1.5">
-                      <AlertTriangle className="h-3.5 w-3.5 text-muted-foreground" />
-                      {alert.type}
-                    </span>
-                  </TableCell>
-                  <TableCell>{getSeverityBadge(alert.severity)}</TableCell>
-                  <TableCell>{getStatusBadge(alert.status)}</TableCell>
-                  <TableCell className="pr-6 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="opacity-0 transition-opacity group-hover:opacity-100"
-                      asChild
+            <CardContent className="px-1 overflow-x-auto">
+              <Table className="relative">
+                <TableHeader>
+                  <TableRow className="border-border/40 hover:bg-transparent">
+                    <TableHead className="px-7 font-bold text-foreground/70 uppercase text-[10px]">
+                      Contract Name
+                    </TableHead>
+                    <TableHead className="font-bold text-foreground/70 uppercase text-[10px]">
+                      Network
+                    </TableHead>
+                    <TableHead className="font-bold text-foreground/70 uppercase text-[10px]">
+                      Risk Analysis
+                    </TableHead>
+                    <TableHead className="text-right font-bold text-foreground/70 uppercase text-[10px]">
+                      TVL (USD)
+                    </TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredContracts.map((contract) => (
+                    <TableRow
+                      key={contract.address}
+                      className="group border-border/20 transition-all hover:bg-primary/[0.03]"
                     >
-                      <Link href={`/dashboard/alerts/${alert.id}`}>
-                        Details
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                      <TableCell className="px-7 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-muted/40 transition-transform group-hover:scale-110">
+                            <FileCode2 className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-foreground">
+                              {contract.name}
+                            </div>
+                            <div className="font-mono text-[10px] text-muted-foreground tracking-tight opacity-70">
+                              {contract.address}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {getChainBadge(
+                          contract.chainSelectorName || "ethereum",
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {getRiskBadge(contract.riskLevel || "low")}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="text-sm font-black tabular-nums">
+                          {contract.tvl || "$0.00"}
+                        </div>
+                        <div className="text-[10px] text-emerald-500 font-bold">
+                          Stable
+                        </div>
+                      </TableCell>
+                      <TableCell className="pr-7 text-right">
+                        <Link
+                          href={`/dashboard/contracts/${contract.id || contract.address}`}
+                          passHref
+                        >
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg transition-all group-hover:bg-primary/20 group-hover:text-primary"
+                          >
+                            <ArrowUpRight className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredContracts.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={5}
+                        className="h-40 text-center text-muted-foreground"
+                      >
+                        No contracts found matching your search.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Live Threat Feed */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <Card className="flex h-full flex-col rounded-3xl border-border/40 bg-card/40 backdrop-blur-xl">
+            <CardHeader className="px-8 py-7">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xl font-bold tracking-tight">
+                  Active Sentinel Feed
+                </CardTitle>
+                <Badge
+                  variant="outline"
+                  className="animate-pulse border-rose-500/30 bg-rose-500/5 text-rose-500 text-[10px]"
+                >
+                  LIVE SCAN
+                </Badge>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                High-sensitivity triggers and anomaly detection.
+              </p>
+            </CardHeader>
+            <CardContent className="flex-1 space-y-4 overflow-y-auto px-8 pb-8">
+              {liveAlerts.length > 0 ? (
+                liveAlerts.map((alert, i) => (
+                  <motion.div
+                    key={alert.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.6 + i * 0.1 }}
+                    className="group relative flex flex-col gap-3 rounded-2xl border border-border/40 bg-muted/10 p-4 transition-all hover:bg-muted/20"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={cn(
+                            "h-7 w-7 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110",
+                            alert.severity === "high"
+                              ? "bg-rose-500/10 text-rose-500"
+                              : alert.severity === "medium"
+                                ? "bg-amber-500/10 text-amber-500"
+                                : "bg-emerald-500/10 text-emerald-500",
+                          )}
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                        </div>
+                        <span className="text-sm font-bold tracking-tight text-foreground">
+                          {alert.contractName || "Unknown"}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-medium text-muted-foreground tabular-nums flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        {alert.timestamp}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-bold tracking-wide text-foreground/80 uppercase mb-1">
+                        {alert.type}
+                      </div>
+                      <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
+                        {alert.description ||
+                          "Potential security event detected on-chain. Requires immediate inspection."}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      {getSeverityBadge(alert.severity)}
+                      {getStatusBadge(alert.status)}
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center opacity-40">
+                  <ShieldCheck className="h-10 w-10 text-muted-foreground mb-2" />
+                  <p className="text-sm">No threats currently detected.</p>
+                </div>
+              )}
+            </CardContent>
+            <div className="p-4 bg-muted/20 border-t border-border/40 rounded-b-3xl">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="w-full text-xs font-bold text-muted-foreground hover:text-primary transition-colors"
+              >
+                View System Historical Audit
+              </Button>
+            </div>
+          </Card>
+        </motion.div>
+      </div>
     </div>
   );
 }

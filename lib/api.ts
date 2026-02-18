@@ -36,6 +36,8 @@ export type DashboardAlert = {
   id: string
   timestamp: string
   contract: string
+  contractName?: string
+  description?: string
   type: string
   severity: "low" | "medium" | "high"
   status: "active" | "acknowledged" | "resolved"

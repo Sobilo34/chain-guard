@@ -1,16 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { useTheme } from "next-themes";
+import * as framerMotion from "framer-motion";
+const motion =
+  (framerMotion as any).motion ||
+  (framerMotion as any).default?.motion ||
+  (framerMotion as any).default;
+const AnimatePresence =
+  (framerMotion as any).AnimatePresence ||
+  (framerMotion as any).default?.AnimatePresence;
 import {
   Bell,
   Mail,
@@ -29,7 +27,28 @@ import {
   Monitor,
   ExternalLink,
   Copy,
+  Zap,
+  Globe,
+  Sliders,
+  Database,
+  Lock,
 } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { useTheme } from "next-themes";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -49,492 +68,427 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-4 lg:p-6">
+    <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          Settings
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Configure notifications, risk thresholds, and account preferences
-        </p>
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="space-y-1.5"
+        >
+          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold tracking-wider text-primary uppercase">
+            <Settings className="h-3 w-3 fill-primary" />
+            System Configuration
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground lg:text-4xl">
+            Preferences<span className="text-primary italic">.</span>
+          </h1>
+          <p className="max-w-xl text-muted-foreground">
+            Tune your sentinel network parameters and security infrastructure.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <Button className="h-12 rounded-2xl bg-primary px-8 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95">
+            <Download className="mr-2 h-4 w-4" />
+            Backup Config
+          </Button>
+        </motion.div>
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="notifications" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
-          <TabsTrigger value="notifications" className="gap-2">
-            <Bell className="h-4 w-4 hidden sm:block" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="thresholds" className="gap-2">
-            <AlertTriangle className="h-4 w-4 hidden sm:block" />
-            Thresholds
-          </TabsTrigger>
-          <TabsTrigger value="policies" className="gap-2">
-            <Shield className="h-4 w-4 hidden sm:block" />
-            Policies
-          </TabsTrigger>
-          <TabsTrigger value="account" className="gap-2">
-            <User className="h-4 w-4 hidden sm:block" />
-            Account
-          </TabsTrigger>
+      <Tabs defaultValue="notifications" className="space-y-8">
+        <TabsList className="h-14 w-full justify-start gap-1 rounded-3xl border border-border/40 bg-card/30 p-1.5 backdrop-blur-xl lg:w-auto">
+          {[
+            { value: "notifications", icon: Bell, label: "Alerting" },
+            { value: "thresholds", icon: Sliders, label: "Thresholds" },
+            { value: "policies", icon: Shield, label: "Security" },
+            { value: "account", icon: User, label: "Identity" },
+          ].map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className="relative h-full gap-2 rounded-2xl px-6 text-sm font-bold transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg"
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
 
-        {/* Notifications Tab */}
-        <TabsContent value="notifications" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Email */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                      <Mail className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">Email Notifications</CardTitle>
-                      <CardDescription>Receive alerts via email</CardDescription>
-                    </div>
-                  </div>
-                  <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} />
-                </div>
-              </CardHeader>
-              {emailEnabled && (
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="alerts@example.com"
-                      defaultValue="john@example.com"
-                    />
-                  </div>
+        <AnimatePresence mode="wait">
+          {/* Notifications Tab */}
+          <TabsContent value="notifications">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="grid gap-6 lg:grid-cols-2"
+            >
+              {/* Email */}
+              <Card className="group relative overflow-hidden rounded-[2rem] border-border/40 bg-card/40 backdrop-blur-xl transition-all hover:border-primary/30">
+                <CardHeader className="p-7">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Status</span>
-                    <Badge className="bg-success/10 text-success border-0 gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Verified
-                    </Badge>
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-
-            {/* Slack */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#4A154B]/10">
-                      <MessageSquare className="h-5 w-5 text-[#4A154B] dark:text-[#E01E5A]" />
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-transform group-hover:scale-110">
+                        <Mail className="h-7 w-7" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl font-bold">
+                          Email Dispatch
+                        </CardTitle>
+                        <CardDescription className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+                          Verified Route
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base">Slack Integration</CardTitle>
-                      <CardDescription>Send alerts to Slack channel</CardDescription>
-                    </div>
-                  </div>
-                  <Switch checked={slackEnabled} onCheckedChange={setSlackEnabled} />
-                </div>
-              </CardHeader>
-              {slackEnabled && (
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-2">
-                    <Label htmlFor="slack-webhook">Webhook URL</Label>
-                    <Input
-                      id="slack-webhook"
-                      type="url"
-                      placeholder="https://hooks.slack.com/..."
-                      defaultValue="https://hooks.slack.com/services/T00..."
+                    <Switch
+                      checked={emailEnabled}
+                      onCheckedChange={setEmailEnabled}
+                      className="scale-125 data-[state=checked]:bg-primary"
                     />
                   </div>
+                </CardHeader>
+                <AnimatePresence>
+                  {emailEnabled && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                    >
+                      <CardContent className="px-7 pb-7 space-y-6">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="email"
+                            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+                          >
+                            Destination Hash
+                          </Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            placeholder="alerts@example.com"
+                            defaultValue="john@example.com"
+                            className="h-12 rounded-xl border-border/40 bg-muted/20 font-medium focus-visible:ring-primary/20"
+                          />
+                        </div>
+                        <div className="flex items-center justify-between rounded-xl bg-emerald-500/5 px-4 py-3 border border-emerald-500/10">
+                          <span className="text-xs font-bold text-muted-foreground">
+                            Security Status
+                          </span>
+                          <Badge className="bg-emerald-500/10 text-emerald-500 border-0 gap-1.5 px-3 py-1 text-[10px] font-black uppercase tracking-wider">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Active
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Card>
+
+              {/* Slack */}
+              <Card className="group relative overflow-hidden rounded-[2rem] border-border/40 bg-card/40 backdrop-blur-xl transition-all hover:border-[#4A154B]/30">
+                <CardHeader className="p-7">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Status</span>
-                    <Badge className="bg-success/10 text-success border-0 gap-1">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Connected
-                    </Badge>
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full bg-transparent">
-                    Test Connection
-                  </Button>
-                </CardContent>
-              )}
-            </Card>
-
-            {/* Telegram */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0088CC]/10">
-                      <Send className="h-5 w-5 text-[#0088CC]" />
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#4A154B]/10 text-[#4A154B] dark:text-[#E01E5A] transition-transform group-hover:scale-110">
+                        <MessageSquare className="h-7 w-7" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl font-bold">
+                          Slack Tunnel
+                        </CardTitle>
+                        <CardDescription className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+                          Legacy Hook
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base">Telegram Bot</CardTitle>
-                      <CardDescription>Get instant alerts via Telegram</CardDescription>
-                    </div>
-                  </div>
-                  <Switch checked={telegramEnabled} onCheckedChange={setTelegramEnabled} />
-                </div>
-              </CardHeader>
-              {telegramEnabled && (
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-2">
-                    <Label htmlFor="telegram-token">Bot Token</Label>
-                    <Input
-                      id="telegram-token"
-                      type="password"
-                      placeholder="Enter your bot token"
+                    <Switch
+                      checked={slackEnabled}
+                      onCheckedChange={setSlackEnabled}
+                      className="scale-125"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="telegram-chat">Chat ID</Label>
-                    <Input
-                      id="telegram-chat"
-                      placeholder="Enter chat ID"
+                </CardHeader>
+                <AnimatePresence>
+                  {slackEnabled && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                    >
+                      <CardContent className="px-7 pb-7 space-y-6">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="slack-webhook"
+                            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+                          >
+                            Webhook URI
+                          </Label>
+                          <Input
+                            id="slack-webhook"
+                            type="url"
+                            placeholder="https://hooks.slack.com/..."
+                            defaultValue="https://hooks.slack.com/services/T00..."
+                            className="h-12 rounded-xl border-border/40 bg-muted/20 font-medium focus-visible:ring-primary/20"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="h-11 w-full rounded-xl border-border/40 font-bold hover:bg-muted/50 transition-all"
+                        >
+                          Test Data Stream
+                        </Button>
+                      </CardContent>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Card>
+
+              {/* Telegram */}
+              <Card className="group relative overflow-hidden rounded-[2rem] border-border/40 bg-card/40 backdrop-blur-xl transition-all hover:border-[#0088CC]/30">
+                <CardHeader className="p-7">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0088CC]/10 text-[#0088CC] transition-transform group-hover:scale-110">
+                        <Send className="h-7 w-7 rotate-12" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl font-bold">
+                          Telegram Bot
+                        </CardTitle>
+                        <CardDescription className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+                          P2P Encrypted
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={telegramEnabled}
+                      onCheckedChange={setTelegramEnabled}
+                      className="scale-125"
                     />
                   </div>
-                  <Button variant="outline" size="sm" className="w-full bg-transparent">
-                    Send Test Message
-                  </Button>
-                </CardContent>
-              )}
-            </Card>
+                </CardHeader>
+                <AnimatePresence>
+                  {telegramEnabled && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                    >
+                      <CardContent className="px-7 pb-7 space-y-6">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="telegram-token"
+                              className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+                            >
+                              Bot Secret
+                            </Label>
+                            <Input
+                              id="telegram-token"
+                              type="password"
+                              placeholder="Key..."
+                              className="h-12 rounded-xl border-border/40 bg-muted/20 focus-visible:ring-primary/20"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label
+                              htmlFor="telegram-chat"
+                              className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+                            >
+                              Chat ID
+                            </Label>
+                            <Input
+                              id="telegram-chat"
+                              placeholder="ID..."
+                              className="h-12 rounded-xl border-border/40 bg-muted/20 focus-visible:ring-primary/20"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="h-11 w-full rounded-xl border-border/40 font-bold hover:bg-muted/50 transition-all"
+                        >
+                          Send Handshake
+                        </Button>
+                      </CardContent>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Card>
 
-            {/* Webhook */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                      <Webhook className="h-5 w-5 text-muted-foreground" />
+              {/* Webhook */}
+              <Card className="group relative overflow-hidden rounded-[2rem] border-border/40 bg-card/40 backdrop-blur-xl transition-all hover:border-emerald-500/30">
+                <CardHeader className="p-7">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 transition-transform group-hover:scale-110">
+                        <Webhook className="h-7 w-7" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-xl font-bold">
+                          Global Webhook
+                        </CardTitle>
+                        <CardDescription className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
+                          Developer Mode
+                        </CardDescription>
+                      </div>
                     </div>
-                    <div>
-                      <CardTitle className="text-base">Custom Webhook</CardTitle>
-                      <CardDescription>Send alerts to your endpoint</CardDescription>
-                    </div>
-                  </div>
-                  <Switch checked={webhookEnabled} onCheckedChange={setWebhookEnabled} />
-                </div>
-              </CardHeader>
-              {webhookEnabled && (
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-2">
-                    <Label htmlFor="webhook-url">Endpoint URL</Label>
-                    <Input
-                      id="webhook-url"
-                      type="url"
-                      placeholder="https://api.example.com/webhook"
+                    <Switch
+                      checked={webhookEnabled}
+                      onCheckedChange={setWebhookEnabled}
+                      className="scale-125"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="webhook-secret">Secret (Optional)</Label>
-                    <Input
-                      id="webhook-secret"
-                      type="password"
-                      placeholder="Webhook secret for verification"
-                    />
-                  </div>
-                  <Button variant="outline" size="sm" className="w-full bg-transparent">
-                    Test Webhook
-                  </Button>
-                </CardContent>
-              )}
-            </Card>
-          </div>
-        </TabsContent>
+                </CardHeader>
+                <AnimatePresence>
+                  {webhookEnabled && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                    >
+                      <CardContent className="px-7 pb-7 space-y-6">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="webhook-url"
+                            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
+                          >
+                            Edge Endpoint
+                          </Label>
+                          <Input
+                            id="webhook-url"
+                            type="url"
+                            placeholder="https://api.gateway.io/v1"
+                            className="h-12 rounded-xl border-border/40 bg-muted/20 focus-visible:ring-primary/20"
+                          />
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="h-11 w-full rounded-xl border-border/40 font-bold hover:bg-muted/50 transition-all"
+                        >
+                          Payload Simulation
+                        </Button>
+                      </CardContent>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </Card>
+            </motion.div>
+          </TabsContent>
 
-        {/* Risk Thresholds Tab */}
-        <TabsContent value="thresholds" className="space-y-6">
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="text-base">Global Risk Thresholds</CardTitle>
-              <CardDescription>
-                Set default thresholds for all monitored contracts. These can be overridden per contract.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {/* Volatility */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">Volatility Threshold</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Alert when market volatility exceeds this percentage
-                    </p>
+          {/* Thresholds Tab */}
+          <TabsContent value="thresholds">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+            >
+              <Card className="rounded-[2.5rem] border-border/40 bg-card/40 backdrop-blur-xl overflow-hidden p-1">
+                <div className="px-10 py-10 bg-muted/10 rounded-[2.2rem]">
+                  <div className="flex items-center gap-3 mb-10">
+                    <Zap className="h-5 w-5 text-primary fill-primary" />
+                    <h3 className="text-2xl font-black tracking-tight text-foreground">
+                      Global Sentinel Logic
+                    </h3>
                   </div>
-                  <span className="text-lg font-semibold text-primary">
-                    {volatilityThreshold}%
-                  </span>
-                </div>
-                <Slider
-                  value={volatilityThreshold}
-                  onValueChange={setVolatilityThreshold}
-                  max={50}
-                  step={1}
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>0%</span>
-                  <span>25%</span>
-                  <span>50%</span>
-                </div>
-              </div>
 
-              <Separator />
+                  <div className="grid gap-12 lg:grid-cols-2">
+                    {/* Thresholds Sliders Column */}
+                    <div className="space-y-10">
+                      <div className="space-y-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-sm font-black uppercase tracking-widest text-foreground">
+                              Volatility Limit
+                            </Label>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Trigger alert on variance deviation increase.
+                            </p>
+                          </div>
+                          <span className="text-2xl font-black text-primary tabular-nums">
+                            {volatilityThreshold}%
+                          </span>
+                        </div>
+                        <Slider
+                          value={volatilityThreshold}
+                          onValueChange={setVolatilityThreshold}
+                          max={50}
+                          step={1}
+                          className="py-4"
+                        />
+                      </div>
 
-              {/* Liquidity Drop */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">Liquidity Drop Threshold</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Alert when liquidity drops by this percentage
-                    </p>
-                  </div>
-                  <span className="text-lg font-semibold text-warning">
-                    {liquidityThreshold}%
-                  </span>
-                </div>
-                <Slider
-                  value={liquidityThreshold}
-                  onValueChange={setLiquidityThreshold}
-                  max={50}
-                  step={1}
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>0%</span>
-                  <span>25%</span>
-                  <span>50%</span>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Price Deviation */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium">Price Deviation Threshold</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Alert when price deviates from oracle by this percentage
-                    </p>
-                  </div>
-                  <span className="text-lg font-semibold text-danger">
-                    {priceDeviationThreshold}%
-                  </span>
-                </div>
-                <Slider
-                  value={priceDeviationThreshold}
-                  onValueChange={setPriceDeviationThreshold}
-                  max={20}
-                  step={0.5}
-                />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>0%</span>
-                  <span>10%</span>
-                  <span>20%</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* CRE Policies Tab */}
-        <TabsContent value="policies" className="space-y-6">
-          <Card className="border-border/50">
-            <CardHeader>
-              <CardTitle className="text-base">Chainlink CRE Integration</CardTitle>
-              <CardDescription>
-                Configure Chainlink Runtime Environment policies and features
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* ACE Compliance */}
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <Shield className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">ACE Compliance Mode</p>
-                    <p className="text-sm text-muted-foreground">
-                      Enforce Automation Compliance Engine standards
-                    </p>
-                  </div>
-                </div>
-                <Switch checked={aceCompliance} onCheckedChange={setAceCompliance} />
-              </div>
-
-              {/* MEV Protection */}
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
-                    <AlertTriangle className="h-5 w-5 text-warning" />
-                  </div>
-                  <div>
-                    <p className="font-medium">MEV Protection</p>
-                    <p className="text-sm text-muted-foreground">
-                      Enable sandwich attack and front-running detection
-                    </p>
-                  </div>
-                </div>
-                <Switch checked={mevProtection} onCheckedChange={setMevProtection} />
-              </div>
-
-              {/* Auto Resolve */}
-              <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-                    <CheckCircle2 className="h-5 w-5 text-success" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Auto-Resolve Alerts</p>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically resolve alerts when conditions normalize
-                    </p>
-                  </div>
-                </div>
-                <Switch checked={autoResolve} onCheckedChange={setAutoResolve} />
-              </div>
-
-              {/* Integration Status */}
-              <div className="mt-6 p-4 rounded-lg border border-success/30 bg-success/5">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="h-5 w-5 text-success" />
-                  <span className="font-medium text-success">Chainlink CRE Connected</span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Your account is connected to Chainlink Runtime Environment. All oracle data and risk assessments are powered by Chainlink.
-                </p>
-                <a
-                  href="https://chain.link"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 mt-2 text-sm text-primary hover:underline"
-                >
-                  Learn more about Chainlink CRE
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Account Tab */}
-        <TabsContent value="account" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Wallet Info */}
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="text-base">Connected Wallet</CardTitle>
-                <CardDescription>Your wallet address and connection status</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-                      0x
+                      <div className="space-y-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-sm font-black uppercase tracking-widest text-foreground">
+                              Liquidity Buffer
+                            </Label>
+                            <p className="text-xs font-medium text-muted-foreground">
+                              Minimum depth required for stable status.
+                            </p>
+                          </div>
+                          <span className="text-2xl font-black text-amber-500 tabular-nums">
+                            {liquidityThreshold}%
+                          </span>
+                        </div>
+                        <Slider
+                          value={liquidityThreshold}
+                          onValueChange={setLiquidityThreshold}
+                          max={50}
+                          step={1}
+                          className="py-4"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <code className="text-sm">0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D</code>
-                      <p className="text-xs text-muted-foreground mt-0.5">Ethereum Mainnet</p>
+
+                    {/* Toggles Column */}
+                    <div className="space-y-8 rounded-3xl border border-border/40 bg-background/40 p-8 self-start shadow-inner">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label className="text-sm font-black text-foreground">
+                            ACE Compliance
+                          </Label>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Auto-check against exchange risk databases.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={aceCompliance}
+                          onCheckedChange={setAceCompliance}
+                          className="scale-110"
+                        />
+                      </div>
+                      <Separator className="bg-border/40" />
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <Label className="text-sm font-black text-foreground">
+                            MEV Countermeasures
+                          </Label>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Detect potential sandwich or frontrun patterns.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={mevProtection}
+                          onCheckedChange={setMevProtection}
+                          className="scale-110"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => copyToClipboard("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D")}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
                 </div>
-                <Button variant="outline" className="w-full gap-2 text-danger hover:text-danger bg-transparent">
-                  <LogOut className="h-4 w-4" />
-                  Disconnect Wallet
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Theme Preference */}
-            <Card className="border-border/50">
-              <CardHeader>
-                <CardTitle className="text-base">Appearance</CardTitle>
-                <CardDescription>Choose your preferred theme</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-3">
-                  <button
-                    onClick={() => setTheme("light")}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-colors ${
-                      theme === "light"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    <Sun className="h-5 w-5" />
-                    <span className="text-sm font-medium">Light</span>
-                  </button>
-                  <button
-                    onClick={() => setTheme("dark")}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-colors ${
-                      theme === "dark"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    <Moon className="h-5 w-5" />
-                    <span className="text-sm font-medium">Dark</span>
-                  </button>
-                  <button
-                    onClick={() => setTheme("system")}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-colors ${
-                      theme === "system"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50"
-                    }`}
-                  >
-                    <Monitor className="h-5 w-5" />
-                    <span className="text-sm font-medium">System</span>
-                  </button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Data Export */}
-            <Card className="border-border/50 lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base">Data Management</CardTitle>
-                <CardDescription>Export your data or manage your account</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4 sm:flex-row">
-                <Button variant="outline" className="gap-2 bg-transparent">
-                  <Download className="h-4 w-4" />
-                  Export Alert History
-                </Button>
-                <Button variant="outline" className="gap-2 bg-transparent">
-                  <Download className="h-4 w-4" />
-                  Export Contract Data
-                </Button>
-                <Button variant="outline" className="gap-2 bg-transparent">
-                  <Settings className="h-4 w-4" />
-                  Export All Settings
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+              </Card>
+            </motion.div>
+          </TabsContent>
+        </AnimatePresence>
       </Tabs>
-
-      {/* Save Bar */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-card/95 backdrop-blur-sm p-4 lg:left-0">
-        <div className="flex items-center justify-end gap-3 max-w-7xl mx-auto">
-          <Button variant="ghost">Cancel</Button>
-          <Button>Save Changes</Button>
-        </div>
-      </div>
     </div>
   );
 }
