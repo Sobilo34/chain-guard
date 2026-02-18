@@ -1,32 +1,53 @@
-'use client'
+"use client";
 
-import { createAppKit } from '@reown/appkit/react'
-import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
-import { mainnet, arbitrum, polygon, optimism, type AppKitNetwork } from '@reown/appkit/networks'
-import { WagmiProvider, type Config } from 'wagmi'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import React, { type ReactNode } from 'react'
+import { createAppKit } from "@reown/appkit/react";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import {
+  mainnet,
+  arbitrum,
+  polygon,
+  optimism,
+  type AppKitNetwork,
+} from "@reown/appkit/networks";
+import {
+  WagmiProvider,
+  type Config,
+  createStorage,
+  cookieStorage,
+} from "wagmi";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React, { type ReactNode } from "react";
 
 // 1. Get projectId from https://cloud.reown.com
-const projectId = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || '847d344b1c7f53a165a25ec88a0b0d3e' // Placeholder
+const projectId =
+  process.env.NEXT_PUBLIC_REOWN_PROJECT_ID ||
+  "847d344b1c7f53a165a25ec88a0b0d3e"; // Placeholder
 
 // 2. Create a metadata object - optional
 const metadata = {
-  name: 'ChainGuard Sentinel',
-  description: 'AI-Powered Smart Contract Risk Monitor',
-  url: 'https://chainguard.sentinel', // origin must match your domain & subdomain
-  icons: ['https://avatars.githubusercontent.com/u/179229932']
-}
+  name: "ChainGuard Sentinel",
+  description: "AI-Powered Smart Contract Risk Monitor",
+  url: "https://chainguard.sentinel",
+  icons: ["https://avatars.githubusercontent.com/u/179229932"],
+};
 
 // 3. Set the networks
-const networks: [AppKitNetwork, ...AppKitNetwork[]] = [mainnet, arbitrum, polygon, optimism]
+const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
+  mainnet,
+  arbitrum,
+  polygon,
+  optimism,
+];
 
 // 4. Create Wagmi Adapter
 const wagmiAdapter = new WagmiAdapter({
   networks,
   projectId,
-  ssr: true
-})
+  ssr: true,
+  storage: createStorage({
+    storage: cookieStorage,
+  }),
+});
 
 // 5. Create modal
 createAppKit({
@@ -34,17 +55,20 @@ createAppKit({
   networks,
   projectId,
   metadata,
+  themeMode: "dark",
   features: {
-    analytics: true // Optional - defaults to your Cloud configuration
-  }
-})
+    analytics: true,
+    onramp: false,
+    swaps: false,
+  },
+});
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient();
 
 export function Web3Provider({ children }: { children: ReactNode }) {
   return (
     <WagmiProvider config={wagmiAdapter.wagmiConfig as Config}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </WagmiProvider>
-  )
+  );
 }

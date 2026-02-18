@@ -5,13 +5,22 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ShieldCheck, ArrowRight, Activity, Zap, Lock, Globe } from "lucide-react";
+import {
+  ShieldCheck,
+  ArrowRight,
+  Activity,
+  Zap,
+  Lock,
+  Globe,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAccount } from "wagmi";
+import { useAppKit } from "@reown/appkit/react";
 
 export default function LoginPage() {
   const router = useRouter();
   const { isConnected, address } = useAccount();
+  const { open } = useAppKit();
   const [contractAddress, setContractAddress] = useState("");
   const [isMounted, setIsMounted] = useState(false);
 
@@ -19,7 +28,8 @@ export default function LoginPage() {
     setIsMounted(true);
   }, []);
 
-  const isValidAddress = contractAddress.startsWith("0x") && contractAddress.length === 42;
+  const isValidAddress =
+    contractAddress.startsWith("0x") && contractAddress.length === 42;
 
   const handleStartMonitoring = () => {
     if (isValidAddress && isConnected) {
@@ -77,8 +87,9 @@ export default function LoginPage() {
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-6 max-w-2xl text-lg text-white/50"
         >
-          Real-time market risk monitoring, liquidity analysis, and depeg detection 
-          orchestrated by AI agents on the Chainlink Runtime Environment.
+          Real-time market risk monitoring, liquidity analysis, and depeg
+          detection orchestrated by AI agents on the Chainlink Runtime
+          Environment.
         </motion.p>
 
         {/* Action Card */}
@@ -96,11 +107,20 @@ export default function LoginPage() {
                     <ShieldCheck className="h-8 w-8 text-primary" />
                   </div>
                   <div className="text-center">
-                    <h3 className="text-lg font-semibold">Start your Protection</h3>
-                    <p className="text-sm text-white/40">Connect your wallet to access the sentinel</p>
+                    <h3 className="text-lg font-semibold">
+                      Start your Protection
+                    </h3>
+                    <p className="text-sm text-white/40">
+                      Connect your wallet to access the sentinel
+                    </p>
                   </div>
                   <div className="w-full mt-2 flex justify-center">
-                    <appkit-button />
+                    <Button
+                      onClick={() => open({ view: "Connect" })}
+                      className="h-12 w-full gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all active:scale-95"
+                    >
+                      Connect Wallet
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -117,18 +137,30 @@ export default function LoginPage() {
                           <div className="h-full w-full bg-gradient-to-br from-primary to-blue-600" />
                         </div>
                         <div className="text-left">
-                          <p className="text-[10px] uppercase tracking-wider text-white/40">Connected Wallet</p>
+                          <p className="text-[10px] uppercase tracking-wider text-white/40">
+                            Connected Wallet
+                          </p>
                           <p className="text-sm font-mono font-medium">
                             {address?.slice(0, 6)}...{address?.slice(-4)}
                           </p>
                         </div>
                       </div>
-                      <appkit-account-button />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => open({ view: "Account" })}
+                        className="rounded-full bg-white/5 hover:bg-white/10 text-xs border border-white/10"
+                      >
+                        Manage
+                      </Button>
                     </div>
 
                     <div className="space-y-4">
                       <div className="text-left space-y-2">
-                        <Label htmlFor="contract" className="text-sm font-medium text-white/70 ml-1">
+                        <Label
+                          htmlFor="contract"
+                          className="text-sm font-medium text-white/70 ml-1"
+                        >
                           Contract Address
                         </Label>
                         <div className="group relative transition-all duration-300">
@@ -165,18 +197,18 @@ export default function LoginPage() {
             {
               icon: Activity,
               title: "Real-time Audits",
-              desc: "Continuous monitoring of pool liquidity and volume spikes."
+              desc: "Continuous monitoring of pool liquidity and volume spikes.",
             },
             {
               icon: Zap,
               title: "AI Analysis",
-              desc: "Gemini-powered sentiment and transaction pattern analysis."
+              desc: "Gemini-powered sentiment and transaction pattern analysis.",
             },
             {
               icon: Lock,
               title: "Autonomous Response",
-              desc: "Automated alerts and circuit breakers via Chainlink CRE."
-            }
+              desc: "Automated alerts and circuit breakers via Chainlink CRE.",
+            },
           ].map((feature, i) => (
             <motion.div
               key={i}
