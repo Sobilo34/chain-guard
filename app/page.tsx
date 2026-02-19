@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   ShieldCheck,
   ArrowRight,
@@ -21,19 +23,57 @@ const AnimatePresence =
   (framerMotion as any).default?.AnimatePresence;
 import { useAccount } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
+import { getAlertEmail, setAlertEmail } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const { isConnected, address } = useAccount();
   const { open } = useAppKit();
   const [isMounted, setIsMounted] = useState(false);
+  const [alertEmail, setAlertEmailState] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  const handleGoToDashboard = () => {
-    router.push("/dashboard");
+  useEffect(() => {
+    if (!isMounted) return;
+    const saved = localStorage.getItem("chainguard.alertEmail");
+    if (saved) setAlertEmailState(saved);
+
+    getAlertEmail()
+      .then((result) => {
+        if (result.email) {
+          setAlertEmailState(result.email);
+          localStorage.setItem("chainguard.alertEmail", result.email);
+        }
+      })
+      .catch(() => {
+        // Ignore fetch errors here
+      });
+  }, [isMounted]);
+
+  const handleGoToDashboard = async () => {
+    const email = alertEmail.trim();
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!isValid) {
+      setEmailError("Enter a valid email to receive alerts.");
+      return;
+    }
+
+    setIsSaving(true);
+    setEmailError(null);
+    try {
+      await setAlertEmail(email);
+      localStorage.setItem("chainguard.alertEmail", email);
+      router.push("/dashboard");
+    } catch {
+      setEmailError("Failed to save email. Check bridge API.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!isMounted) return null;
@@ -173,11 +213,36 @@ export default function LoginPage() {
                       </div>
                     </div>
 
+                    <div className="space-y-2 text-left">
+                      <Label
+                        htmlFor="alert-email"
+                        className="text-sm font-medium text-white/70"
+                      >
+                        Alert Email
+                      </Label>
+                      <Input
+                        id="alert-email"
+                        type="email"
+                        placeholder="alerts@example.com"
+                        value={alertEmail}
+                        onChange={(e) => setAlertEmailState(e.target.value)}
+                        className="h-12 border-white/10 bg-black/50 text-white placeholder:text-white/20 focus-visible:ring-0 focus-visible:ring-offset-0"
+                      />
+                      <p className="text-xs text-white/40">
+                        Email is required to receive CRE + Gemini alerts. Other
+                        channels coming soon.
+                      </p>
+                      {emailError && (
+                        <p className="text-xs text-rose-400">{emailError}</p>
+                      )}
+                    </div>
+
                     <Button
                       onClick={handleGoToDashboard}
+                      disabled={isSaving}
                       className="h-12 w-full gap-2 rounded-xl bg-primary text-white hover:bg-primary/90 transition-all active:scale-95"
                     >
-                      Go to Dashboard
+                      {isSaving ? "Saving..." : "Save Email & Go to Dashboard"}
                       <ArrowRight className="h-4 w-4" />
                     </Button>
                   </motion.div>

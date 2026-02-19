@@ -12,6 +12,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -37,118 +47,12 @@ import {
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import {
   getOverview,
+  addContract,
   runGeminiScan,
   type DashboardAlert,
   type DashboardContract,
 } from "@/lib/api";
-
-const kpiData = [
-  {
-    title: "Monitored Contracts",
-    value: "12",
-    change: "+2 this week",
-    icon: FileCode2,
-    color: "text-primary",
-    bgColor: "bg-primary/10",
-  },
-  {
-    title: "Active Alerts",
-    value: "3",
-    change: "2 high severity",
-    icon: AlertTriangle,
-    color: "text-danger",
-    bgColor: "bg-danger/10",
-  },
-  {
-    title: "Total Value Locked",
-    value: "$24.5M",
-    change: "+12.3% MTD",
-    icon: TrendingUp,
-    color: "text-success",
-    bgColor: "bg-success/10",
-  },
-  {
-    title: "Risk Score",
-    value: "72/100",
-    change: "Good standing",
-    icon: ShieldCheck,
-    color: "text-warning",
-    bgColor: "bg-warning/10",
-  },
-];
-
-const monitoredContracts = [
-  {
-    id: "1",
-    name: "Uniswap V3 Pool",
-    address: "0x8ad5...3f21",
-    tvl: "$8.2M",
-    riskLevel: "low",
-    volatility: "8.2%",
-    chain: "ethereum",
-  },
-  {
-    id: "2",
-    name: "Aave Lending Pool",
-    address: "0x7fc7...9e42",
-    tvl: "$12.1M",
-    riskLevel: "medium",
-    volatility: "15.4%",
-    chain: "polygon",
-  },
-  {
-    id: "3",
-    name: "Curve Finance",
-    address: "0x2d94...8b73",
-    tvl: "$4.2M",
-    riskLevel: "high",
-    volatility: "32.1%",
-    chain: "ethereum",
-  },
-];
-
-const recentAlerts = [
-  {
-    id: "1",
-    timestamp: "2 min ago",
-    contract: "Curve Finance",
-    type: "Liquidity Drop",
-    severity: "high",
-    status: "active",
-  },
-  {
-    id: "2",
-    timestamp: "15 min ago",
-    contract: "Aave Lending Pool",
-    type: "Volatility Spike",
-    severity: "medium",
-    status: "active",
-  },
-  {
-    id: "3",
-    timestamp: "1 hour ago",
-    contract: "Uniswap V3 Pool",
-    type: "Price Deviation",
-    severity: "low",
-    status: "resolved",
-  },
-  {
-    id: "4",
-    timestamp: "3 hours ago",
-    contract: "Curve Finance",
-    type: "TVL Change",
-    severity: "medium",
-    status: "acknowledged",
-  },
-  {
-    id: "5",
-    timestamp: "6 hours ago",
-    contract: "SushiSwap Pool",
-    type: "Manipulation Risk",
-    severity: "high",
-    status: "resolved",
-  },
-];
+import { createPublicClient, http, parseAbi } from "viem";
 
 const getRiskBadge = (level: string) => {
   const normalizedLevel = level.toLowerCase();
@@ -247,18 +151,46 @@ const getStatusBadge = (status: string) => {
 
 const getChainBadge = (chain: string) => {
   switch (chain) {
-    case "ethereum":
+    case "ethereum-testnet-sepolia":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-[#627EEA]" />
-          ETH
+          Sepolia
         </span>
       );
-    case "polygon":
+    case "ethereum-testnet-holesky":
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-[#627EEA]" />
+          Holesky
+        </span>
+      );
+    case "polygon-testnet-amoy":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-[#8247E5]" />
-          MATIC
+          Amoy
+        </span>
+      );
+    case "ethereum-testnet-sepolia-arbitrum-1":
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-[#28A0F0]" />
+          Arb Sep
+        </span>
+      );
+    case "ethereum-testnet-sepolia-optimism-1":
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-[#FF0420]" />
+          OP Sep
+        </span>
+      );
+    case "ethereum-testnet-sepolia-base-1":
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-[#0052FF]" />
+          Base Sep
         </span>
       );
     default:
@@ -289,20 +221,98 @@ const formatLastSync = (value: string) => {
   return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 };
 
+const erc20Abi = parseAbi([
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+]);
+
+const TESTNET_CHAINS = {
+  sepolia: {
+    label: "Ethereum Sepolia",
+    chainSelectorName: "ethereum-testnet-sepolia",
+    rpcUrl: "https://rpc.ankr.com/eth_sepolia",
+  },
+  holesky: {
+    label: "Ethereum Holesky",
+    chainSelectorName: "ethereum-testnet-holesky",
+    rpcUrl: "https://rpc.ankr.com/eth_holesky",
+  },
+  polygonAmoy: {
+    label: "Polygon Amoy",
+    chainSelectorName: "polygon-testnet-amoy",
+    rpcUrl: "https://rpc.ankr.com/polygon_amoy",
+  },
+  arbitrumSepolia: {
+    label: "Arbitrum Sepolia",
+    chainSelectorName: "ethereum-testnet-sepolia-arbitrum-1",
+    rpcUrl: "https://rpc.ankr.com/arbitrum_sepolia",
+  },
+  optimismSepolia: {
+    label: "Optimism Sepolia",
+    chainSelectorName: "ethereum-testnet-sepolia-optimism-1",
+    rpcUrl: "https://rpc.ankr.com/optimism_sepolia",
+  },
+  baseSepolia: {
+    label: "Base Sepolia",
+    chainSelectorName: "ethereum-testnet-sepolia-base-1",
+    rpcUrl: "https://rpc.ankr.com/base_sepolia",
+  },
+};
+
+const getChainConfig = (
+  chainKey: string,
+  custom?: {
+    chainName?: string;
+    chainSelectorName?: string;
+    rpcUrl?: string;
+  },
+) => {
+  if (chainKey === "custom") {
+    return {
+      chainName: custom?.chainName || "Custom Testnet",
+      chainSelectorName: custom?.chainSelectorName || "custom-testnet",
+      rpcUrl: custom?.rpcUrl || "",
+    };
+  }
+
+  const preset = TESTNET_CHAINS[chainKey as keyof typeof TESTNET_CHAINS];
+  return {
+    chainName: preset?.label || "Ethereum Sepolia",
+    chainSelectorName: preset?.chainSelectorName || "ethereum-testnet-sepolia",
+    rpcUrl: preset?.rpcUrl || "https://rpc.ankr.com/eth_sepolia",
+  };
+};
+
 export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [liveKpis, setLiveKpis] = useState<any[]>([]);
   const [liveContracts, setLiveContracts] = useState<DashboardContract[]>([]);
   const [liveAlerts, setLiveAlerts] = useState<DashboardAlert[]>([]);
-  const [systemStatus, setSystemStatus] = useState({
-    oracle: "online",
-    riskEngine: "active",
-    alertService: "running",
-    lastSync: "just now",
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  const [systemStatus, setSystemStatus] = useState<{
+    oracle?: string;
+    riskEngine?: string;
+    alertService?: string;
+    lastSync?: string;
+  }>({});
   const [isScanning, setIsScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  const [detectMessage, setDetectMessage] = useState<string | null>(null);
+  const [addForm, setAddForm] = useState({
+    address: "",
+    chain: "sepolia",
+    name: "",
+    protocol: "Normal",
+    riskProfile: "balanced",
+    customChainName: "",
+    customChainSelectorName: "",
+    customRpcUrl: "",
+    customChainId: "",
+  });
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -358,7 +368,6 @@ export default function DashboardPage() {
           alertService: data.system.alertService,
           lastSync: data.system.lastSync,
         });
-        setIsLoading(false);
       } catch (err) {
         console.error("Dashboard refresh failed:", err);
       }
@@ -410,6 +419,260 @@ export default function DashboardPage() {
     }
   };
 
+  const getRiskThresholds = (profile: string) => {
+    switch (profile) {
+      case "conservative":
+        return {
+          volatility: 0.1,
+          liquidity: 0.12,
+          concentration: 0.15,
+          overall: 0.2,
+        };
+      case "aggressive":
+        return {
+          volatility: 0.25,
+          liquidity: 0.3,
+          concentration: 0.35,
+          overall: 0.4,
+        };
+      case "balanced":
+      default:
+        return {
+          volatility: 0.15,
+          liquidity: 0.2,
+          concentration: 0.25,
+          overall: 0.3,
+        };
+    }
+  };
+
+  const handleDetectMetadata = async () => {
+    if (!addForm.address.trim()) return;
+
+    setIsDetecting(true);
+    setDetectMessage(null);
+    try {
+      const chainConfig = getChainConfig(addForm.chain, {
+        chainName: addForm.customChainName,
+        chainSelectorName: addForm.customChainSelectorName,
+        rpcUrl: addForm.customRpcUrl,
+      });
+
+      if (!chainConfig.rpcUrl) {
+        setDetectMessage(
+          "Please provide a custom RPC URL for metadata detection.",
+        );
+        return;
+      }
+
+      const client = createPublicClient({
+        transport: http(chainConfig.rpcUrl),
+      });
+
+      const [nameResult, symbolResult, decimalsResult] =
+        await Promise.allSettled([
+          client.readContract({
+            address: addForm.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: "name",
+          }),
+          client.readContract({
+            address: addForm.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: "symbol",
+          }),
+          client.readContract({
+            address: addForm.address as `0x${string}`,
+            abi: erc20Abi,
+            functionName: "decimals",
+          }),
+        ]);
+
+      const name =
+        nameResult.status === "fulfilled" ? nameResult.value : undefined;
+      const symbol =
+        symbolResult.status === "fulfilled" ? symbolResult.value : undefined;
+      const decimals =
+        decimalsResult.status === "fulfilled"
+          ? decimalsResult.value
+          : undefined;
+
+      if (name || symbol) {
+        setAddForm((prev) => ({
+          ...prev,
+          name: prev.name || String(name || symbol),
+        }));
+        setDetectMessage(
+          `Detected token metadata${decimals !== undefined ? ` (${decimals} decimals)` : ""}.`,
+        );
+      } else {
+        setDetectMessage(
+          "Metadata not detected. Please enter details manually.",
+        );
+      }
+    } catch {
+      setDetectMessage(
+        "Metadata lookup failed. Please enter details manually.",
+      );
+    } finally {
+      setIsDetecting(false);
+    }
+  };
+
+  const handleAddContract = async () => {
+    const address = addForm.address.trim();
+    const isAddressValid = /^0x[a-fA-F0-9]{40}$/.test(address);
+    if (!isAddressValid) {
+      setAddError("Please enter a valid 0x contract address.");
+      return;
+    }
+    if (!addForm.protocol) {
+      setAddError("Please select a protocol type.");
+      return;
+    }
+
+    const chainConfig = getChainConfig(addForm.chain, {
+      chainName: addForm.customChainName,
+      chainSelectorName: addForm.customChainSelectorName,
+      rpcUrl: addForm.customRpcUrl,
+    });
+
+    if (addForm.chain === "custom") {
+      if (
+        !addForm.customChainName ||
+        !addForm.customChainSelectorName ||
+        !addForm.customRpcUrl
+      ) {
+        setAddError("Provide custom chain name, selector, and RPC URL.");
+        return;
+      }
+    }
+
+    setIsAdding(true);
+    setAddError(null);
+    try {
+      const fallbackName = `${addForm.protocol} ${address.slice(0, 6)}...${address.slice(-4)}`;
+
+      await addContract({
+        address,
+        chain: chainConfig.chainSelectorName,
+        chainSelectorName: chainConfig.chainSelectorName,
+        chainName: chainConfig.chainName,
+        rpcUrl: chainConfig.rpcUrl,
+        chainId: addForm.customChainId
+          ? Number(addForm.customChainId)
+          : undefined,
+        name: addForm.name || fallbackName,
+        protocol: addForm.protocol,
+        riskThresholds: getRiskThresholds(addForm.riskProfile),
+        alertChannels: ["email"],
+      });
+
+      const response = await getOverview();
+      const data = response.data;
+      setLiveKpis([
+        {
+          title: "Monitored Contracts",
+          value: `${data.kpis.monitoredContracts}`,
+          change: "Live from bridge API",
+          icon: FileCode2,
+          color: "text-primary",
+          bgColor: "bg-primary/10",
+        },
+        {
+          title: "Active Alerts",
+          value: `${data.kpis.activeAlerts}`,
+          change: `${data.kpis.activeAlerts} currently active`,
+          icon: AlertTriangle,
+          color: "text-danger",
+          bgColor: "bg-danger/10",
+        },
+        {
+          title: "Total Value Locked",
+          value: `$${(data.kpis.totalValueLocked / 1000000).toFixed(1)}M`,
+          change: "Derived from monitored contracts",
+          icon: TrendingUp,
+          color: "text-success",
+          bgColor: "bg-success/10",
+        },
+        {
+          title: "Risk Score",
+          value: `${data.kpis.riskScore}/100`,
+          change: data.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing",
+          icon: ShieldCheck,
+          color: data.kpis.riskScore >= 70 ? "text-warning" : "text-success",
+          bgColor:
+            data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
+        },
+      ]);
+      setLiveContracts(data.contracts);
+      setLiveAlerts(data.alerts);
+      setSystemStatus({
+        oracle: data.system.oracle,
+        riskEngine: data.system.riskEngine,
+        alertService: data.system.alertService,
+        lastSync: data.system.lastSync,
+      });
+
+      setAddForm({
+        address: "",
+        chain: "sepolia",
+        name: "",
+        protocol: "Normal",
+        riskProfile: "balanced",
+        customChainName: "",
+        customChainSelectorName: "",
+        customRpcUrl: "",
+        customChainId: "",
+      });
+      setDetectMessage(null);
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      console.error("Failed to add contract", err);
+      setAddError("Failed to add contract. Check bridge API availability.");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const parsePercentage = (value?: string) => {
+    if (!value) return null;
+    const cleaned = value.replace(/%/g, "");
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const parseTvl = (value?: string) => {
+    if (!value) return null;
+    const cleaned = value.replace(/\$/g, "");
+    if (cleaned.toLowerCase().endsWith("m")) {
+      const amount = Number.parseFloat(cleaned.replace(/m/i, ""));
+      return Number.isFinite(amount) ? amount * 1_000_000 : null;
+    }
+    const parsed = Number.parseFloat(cleaned.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const volatilitySeries = liveContracts
+    .map((contract) => ({
+      name: contract.name,
+      volatility: parsePercentage(contract.volatility),
+    }))
+    .filter((item) => item.volatility !== null) as Array<{
+    name: string;
+    volatility: number;
+  }>;
+
+  const liquiditySeries = liveContracts
+    .map((contract) => ({
+      name: contract.name,
+      tvl: parseTvl(contract.tvl),
+    }))
+    .filter((item) => item.tvl !== null) as Array<{
+    name: string;
+    tvl: number;
+  }>;
+
   return (
     <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
       {/* Hero / Header Section */}
@@ -441,13 +704,13 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2 border-r border-border/40 pr-4">
               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="text-xs font-semibold text-foreground/80">
-                Oracle: Online
+                Oracle: {systemStatus.oracle || "Loading"}
               </span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
               <span className="text-xs font-medium text-muted-foreground tabular-nums">
-                Sync: {systemStatus.lastSync}
+                Sync: {systemStatus.lastSync || "--"}
               </span>
             </div>
           </div>
@@ -466,13 +729,282 @@ export default function DashboardPage() {
             />
             {isScanning ? "Scanning Ecosystem..." : "Force Scan"}
           </Button>
-          <Button
-            size="lg"
-            className="h-12 rounded-2xl bg-primary px-6 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            Add Contract
-          </Button>
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button
+                size="lg"
+                className="h-12 rounded-2xl bg-primary px-6 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+              >
+                <Plus className="mr-2 h-5 w-5" />
+                Add Contract
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg rounded-3xl border-border/40 bg-card/90 backdrop-blur-2xl">
+              <DialogHeader>
+                <DialogTitle className="text-xl font-bold">
+                  Add new contract to monitor
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  Provide the chain, protocol, and address so the bridge API can
+                  start monitoring.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-5 py-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="address"
+                    className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                  >
+                    Contract Address
+                  </Label>
+                  <Input
+                    id="address"
+                    placeholder="0x..."
+                    className="h-12 rounded-xl border-border/40 bg-muted/30 font-mono text-sm focus-visible:ring-primary/20"
+                    value={addForm.address}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, address: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="chain"
+                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                    >
+                      Chain (Testnet Only)
+                    </Label>
+                    <div className="relative">
+                      <select
+                        id="chain"
+                        value={addForm.chain}
+                        onChange={(e) =>
+                          setAddForm({ ...addForm, chain: e.target.value })
+                        }
+                        className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="sepolia">Ethereum Sepolia</option>
+                        <option value="holesky">Ethereum Holesky</option>
+                        <option value="polygonAmoy">Polygon Amoy</option>
+                        <option value="arbitrumSepolia">
+                          Arbitrum Sepolia
+                        </option>
+                        <option value="optimismSepolia">
+                          Optimism Sepolia
+                        </option>
+                        <option value="baseSepolia">Base Sepolia</option>
+                        <option value="custom">Custom Testnet</option>
+                      </select>
+                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="protocol"
+                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                    >
+                      Protocol Type
+                    </Label>
+                    <div className="relative">
+                      <select
+                        id="protocol"
+                        value={addForm.protocol}
+                        onChange={(e) =>
+                          setAddForm({ ...addForm, protocol: e.target.value })
+                        }
+                        className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="Normal">Normal</option>
+                        <option value="Diamond">Diamond</option>
+                        <option value="UUPS">UUPS</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+
+                {addForm.chain === "custom" && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="customChainName"
+                        className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                      >
+                        Custom Chain Name
+                      </Label>
+                      <Input
+                        id="customChainName"
+                        placeholder="e.g., Local Sepolia"
+                        className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                        value={addForm.customChainName}
+                        onChange={(e) =>
+                          setAddForm({
+                            ...addForm,
+                            customChainName: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="customChainSelector"
+                        className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                      >
+                        Chain Selector Name
+                      </Label>
+                      <Input
+                        id="customChainSelector"
+                        placeholder="custom-testnet"
+                        className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                        value={addForm.customChainSelectorName}
+                        onChange={(e) =>
+                          setAddForm({
+                            ...addForm,
+                            customChainSelectorName: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label
+                        htmlFor="customRpcUrl"
+                        className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                      >
+                        RPC URL (Testnet)
+                      </Label>
+                      <Input
+                        id="customRpcUrl"
+                        placeholder="https://..."
+                        className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                        value={addForm.customRpcUrl}
+                        onChange={(e) =>
+                          setAddForm({
+                            ...addForm,
+                            customRpcUrl: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label
+                        htmlFor="customChainId"
+                        className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                      >
+                        Chain ID (optional)
+                      </Label>
+                      <Input
+                        id="customChainId"
+                        placeholder="11155111"
+                        className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                        value={addForm.customChainId}
+                        onChange={(e) =>
+                          setAddForm({
+                            ...addForm,
+                            customChainId: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="name"
+                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                    >
+                      Contract Name (optional)
+                    </Label>
+                    <Input
+                      id="name"
+                      placeholder="e.g., Uniswap V3 Pool"
+                      className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                      value={addForm.name}
+                      onChange={(e) =>
+                        setAddForm({ ...addForm, name: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="risk"
+                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                    >
+                      Risk Profile
+                    </Label>
+                    <div className="relative">
+                      <select
+                        id="risk"
+                        value={addForm.riskProfile}
+                        onChange={(e) =>
+                          setAddForm({
+                            ...addForm,
+                            riskProfile: e.target.value,
+                          })
+                        }
+                        className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="conservative">Conservative</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="aggressive">Aggressive</option>
+                      </select>
+                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/40 bg-muted/20 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Auto-detect metadata
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Uses a public RPC to read ERC-20 name/symbol.
+                    </p>
+                    {detectMessage && (
+                      <p className="text-[11px] text-primary mt-1">
+                        {detectMessage}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isDetecting}
+                    onClick={handleDetectMetadata}
+                    className="h-9 rounded-xl border-border/40"
+                  >
+                    {isDetecting ? "Detecting..." : "Detect"}
+                  </Button>
+                </div>
+                {addError && (
+                  <p className="text-sm text-rose-500 font-medium">
+                    {addError}
+                  </p>
+                )}
+              </div>
+              <DialogFooter className="gap-2 sm:justify-between">
+                <Button
+                  variant="ghost"
+                  className="rounded-xl font-bold"
+                  onClick={() => setIsAddDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="rounded-xl px-8 font-bold bg-primary hover:bg-primary/90"
+                  onClick={handleAddContract}
+                  disabled={isAdding}
+                >
+                  {isAdding ? "Adding..." : "Add to Monitoring"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </motion.div>
       </div>
 
@@ -520,6 +1052,11 @@ export default function DashboardPage() {
           </motion.div>
         ))}
       </div>
+
+      <DashboardCharts
+        volatilitySeries={volatilitySeries}
+        liquiditySeries={liquiditySeries}
+      />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Monitored Assets Table */}
@@ -601,8 +1138,8 @@ export default function DashboardPage() {
                         <div className="text-sm font-black tabular-nums">
                           {contract.tvl || "$0.00"}
                         </div>
-                        <div className="text-[10px] text-emerald-500 font-bold">
-                          Stable
+                        <div className="text-[10px] text-muted-foreground font-bold">
+                          Updated {formatLastSync(contract.lastUpdate || "")}
                         </div>
                       </TableCell>
                       <TableCell className="pr-7 text-right">

@@ -100,18 +100,34 @@ export async function getContractDetail(address: string) {
 
 export async function addContract(payload: {
   address: string
-  chainSelectorName: string
+  chain: string
+  chainSelectorName?: string
+  chainName?: string
+  rpcUrl?: string
+  chainId?: number
   name?: string
-  protocol?: string
+  protocol: string
+  riskThresholds?: {
+    volatility: number
+    liquidity: number
+    concentration: number
+    overall?: number
+  }
+  priceFeeds?: { asset: string; feedAddress: string; decimals?: number }[]
+  alertChannels?: Array<"email">
 }) {
-  return fetchJson<DashboardContract>(`${API_BASE_URL}/api/contracts`, {
-    method: "POST",
-    body: JSON.stringify({
-      ...payload,
-      protocol: payload.protocol || "Generic protocol",
-      chain: payload.chainSelectorName,
-    }),
-  })
+  const response = await fetchJson<{ data: DashboardContract }>(
+    `${API_BASE_URL}/api/contracts`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        ...payload,
+        protocol: payload.protocol || "Normal",
+        alertChannels: payload.alertChannels?.length ? payload.alertChannels : ["email"],
+      }),
+    },
+  )
+  return response.data
 }
 
 export async function runGeminiScan(payload?: {
@@ -144,6 +160,17 @@ export async function getAlerts(
   return response.json()
 }
 
+export async function getAlertEmail() {
+  return fetchJson<{ email: string | null }>(`${API_BASE_URL}/api/notifications/email`)
+}
+
+export async function setAlertEmail(email: string) {
+  return fetchJson<{ success: boolean; email: string }>(`${API_BASE_URL}/api/notifications/email`, {
+    method: "PUT",
+    body: JSON.stringify({ email }),
+  })
+}
+
 export async function acknowledgeAlert(alertId: string) {
   return fetchJson<{ success: boolean }>(`${API_BASE_URL}/api/alerts/${alertId}/acknowledge`, {
     method: "POST",
@@ -154,4 +181,13 @@ export async function resolveAlert(alertId: string) {
   return fetchJson<{ success: boolean }>(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
     method: "POST",
   })
+}
+
+export async function triggerTestEmail() {
+  return fetchJson<{ success: boolean; message: string }>(
+    `${API_BASE_URL}/api/notifications/test`,
+    {
+      method: "POST",
+    }
+  );
 }

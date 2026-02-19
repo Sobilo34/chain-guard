@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as framerMotion from "framer-motion";
 const motion =
   (framerMotion as any).motion ||
@@ -49,13 +49,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "next-themes";
+import { getAlertEmail, setAlertEmail, triggerTestEmail } from "@/lib/api";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [emailEnabled, setEmailEnabled] = useState(true);
-  const [slackEnabled, setSlackEnabled] = useState(true);
-  const [telegramEnabled, setTelegramEnabled] = useState(false);
-  const [webhookEnabled, setWebhookEnabled] = useState(false);
+  const [alertEmail, setAlertEmailState] = useState("");
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [volatilityThreshold, setVolatilityThreshold] = useState([15]);
   const [liquidityThreshold, setLiquidityThreshold] = useState([20]);
   const [priceDeviationThreshold, setPriceDeviationThreshold] = useState([5]);
@@ -65,6 +67,56 @@ export default function SettingsPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem("chainguard.alertEmail");
+    if (saved) setAlertEmailState(saved);
+
+    getAlertEmail()
+      .then((result) => {
+        if (result.email) {
+          setAlertEmailState(result.email);
+          localStorage.setItem("chainguard.alertEmail", result.email);
+        }
+      })
+      .catch(() => {
+        // ignore
+      });
+  }, []);
+
+  const handleSaveEmail = async () => {
+    const email = alertEmail.trim();
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!isValid) {
+      setEmailStatus("Enter a valid email address.");
+      return;
+    }
+
+    setIsSavingEmail(true);
+    setEmailStatus(null);
+    try {
+      await setAlertEmail(email);
+      localStorage.setItem("chainguard.alertEmail", email);
+      setEmailStatus("Email updated successfully.");
+    } catch {
+      setEmailStatus("Failed to update email. Check bridge API.");
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
+  const handleTestEmail = async () => {
+    setIsTestingEmail(true);
+    setEmailStatus(null);
+    try {
+      const result = await triggerTestEmail();
+      setEmailStatus(result.message);
+    } catch (err: any) {
+      setEmailStatus(err.message || "Failed to trigger test notification.");
+    } finally {
+      setIsTestingEmail(false);
+    }
   };
 
   return (
@@ -121,8 +173,9 @@ export default function SettingsPage() {
 
         <AnimatePresence mode="wait">
           {/* Notifications Tab */}
-          <TabsContent value="notifications">
+          <TabsContent key="notifications" value="notifications">
             <motion.div
+              key="notifications-content"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -155,6 +208,7 @@ export default function SettingsPage() {
                 <AnimatePresence>
                   {emailEnabled && (
                     <motion.div
+                      key="email-settings-panel"
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
@@ -171,10 +225,38 @@ export default function SettingsPage() {
                             id="email"
                             type="email"
                             placeholder="alerts@example.com"
-                            defaultValue="john@example.com"
+                            value={alertEmail}
+                            onChange={(event) =>
+                              setAlertEmailState(event.target.value)
+                            }
                             className="h-12 rounded-xl border-border/40 bg-muted/20 font-medium focus-visible:ring-primary/20"
                           />
                         </div>
+                        <div className="flex flex-col gap-3">
+                          <Button
+                            onClick={handleSaveEmail}
+                            disabled={isSavingEmail}
+                            className="h-11 w-full rounded-xl font-bold bg-primary hover:bg-primary/90"
+                          >
+                            {isSavingEmail ? "Saving..." : "Save Email"}
+                          </Button>
+                          <Button
+                            onClick={handleTestEmail}
+                            disabled={isTestingEmail || !alertEmail}
+                            variant="outline"
+                            className="h-11 w-full rounded-xl font-bold border-primary/20 hover:bg-primary/5 text-primary"
+                          >
+                            <Send className="mr-2 h-4 w-4" />
+                            {isTestingEmail
+                              ? "Triggering..."
+                              : "Test Notification"}
+                          </Button>
+                        </div>
+                        {emailStatus && (
+                          <p className="text-xs text-muted-foreground">
+                            {emailStatus}
+                          </p>
+                        )}
                         <div className="flex items-center justify-between rounded-xl bg-emerald-500/5 px-4 py-3 border border-emerald-500/10">
                           <span className="text-xs font-bold text-muted-foreground">
                             Security Status
@@ -207,46 +289,16 @@ export default function SettingsPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    <Switch
-                      checked={slackEnabled}
-                      onCheckedChange={setSlackEnabled}
-                      className="scale-125"
-                    />
+                    <Badge className="bg-muted/20 text-muted-foreground border-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
+                      Coming Soon
+                    </Badge>
                   </div>
                 </CardHeader>
-                <AnimatePresence>
-                  {slackEnabled && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                    >
-                      <CardContent className="px-7 pb-7 space-y-6">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="slack-webhook"
-                            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
-                          >
-                            Webhook URI
-                          </Label>
-                          <Input
-                            id="slack-webhook"
-                            type="url"
-                            placeholder="https://hooks.slack.com/..."
-                            defaultValue="https://hooks.slack.com/services/T00..."
-                            className="h-12 rounded-xl border-border/40 bg-muted/20 font-medium focus-visible:ring-primary/20"
-                          />
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="h-11 w-full rounded-xl border-border/40 font-bold hover:bg-muted/50 transition-all"
-                        >
-                          Test Data Stream
-                        </Button>
-                      </CardContent>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <CardContent className="px-7 pb-7">
+                  <div className="rounded-xl border border-border/40 bg-muted/20 p-4 text-xs text-muted-foreground">
+                    Slack notifications are coming soon.
+                  </div>
+                </CardContent>
               </Card>
 
               {/* Telegram */}
@@ -266,60 +318,16 @@ export default function SettingsPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    <Switch
-                      checked={telegramEnabled}
-                      onCheckedChange={setTelegramEnabled}
-                      className="scale-125"
-                    />
+                    <Badge className="bg-muted/20 text-muted-foreground border-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
+                      Coming Soon
+                    </Badge>
                   </div>
                 </CardHeader>
-                <AnimatePresence>
-                  {telegramEnabled && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                    >
-                      <CardContent className="px-7 pb-7 space-y-6">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label
-                              htmlFor="telegram-token"
-                              className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
-                            >
-                              Bot Secret
-                            </Label>
-                            <Input
-                              id="telegram-token"
-                              type="password"
-                              placeholder="Key..."
-                              className="h-12 rounded-xl border-border/40 bg-muted/20 focus-visible:ring-primary/20"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label
-                              htmlFor="telegram-chat"
-                              className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
-                            >
-                              Chat ID
-                            </Label>
-                            <Input
-                              id="telegram-chat"
-                              placeholder="ID..."
-                              className="h-12 rounded-xl border-border/40 bg-muted/20 focus-visible:ring-primary/20"
-                            />
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="h-11 w-full rounded-xl border-border/40 font-bold hover:bg-muted/50 transition-all"
-                        >
-                          Send Handshake
-                        </Button>
-                      </CardContent>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <CardContent className="px-7 pb-7">
+                  <div className="rounded-xl border border-border/40 bg-muted/20 p-4 text-xs text-muted-foreground">
+                    Telegram notifications are coming soon.
+                  </div>
+                </CardContent>
               </Card>
 
               {/* Webhook */}
@@ -339,52 +347,24 @@ export default function SettingsPage() {
                         </CardDescription>
                       </div>
                     </div>
-                    <Switch
-                      checked={webhookEnabled}
-                      onCheckedChange={setWebhookEnabled}
-                      className="scale-125"
-                    />
+                    <Badge className="bg-muted/20 text-muted-foreground border-0 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
+                      Coming Soon
+                    </Badge>
                   </div>
                 </CardHeader>
-                <AnimatePresence>
-                  {webhookEnabled && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                    >
-                      <CardContent className="px-7 pb-7 space-y-6">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="webhook-url"
-                            className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground"
-                          >
-                            Edge Endpoint
-                          </Label>
-                          <Input
-                            id="webhook-url"
-                            type="url"
-                            placeholder="https://api.gateway.io/v1"
-                            className="h-12 rounded-xl border-border/40 bg-muted/20 focus-visible:ring-primary/20"
-                          />
-                        </div>
-                        <Button
-                          variant="outline"
-                          className="h-11 w-full rounded-xl border-border/40 font-bold hover:bg-muted/50 transition-all"
-                        >
-                          Payload Simulation
-                        </Button>
-                      </CardContent>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <CardContent className="px-7 pb-7">
+                  <div className="rounded-xl border border-border/40 bg-muted/20 p-4 text-xs text-muted-foreground">
+                    Webhook notifications are coming soon.
+                  </div>
+                </CardContent>
               </Card>
             </motion.div>
           </TabsContent>
 
           {/* Thresholds Tab */}
-          <TabsContent value="thresholds">
+          <TabsContent key="thresholds" value="thresholds">
             <motion.div
+              key="thresholds-content"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}

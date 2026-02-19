@@ -610,35 +610,79 @@ export default function AlertsPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-8 py-10 space-y-10">
-                {/* LLM Insight Section */}
-                <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-primary/5 p-6 space-y-4">
+                {/* Gemini Engine Analysis */}
+                <section className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5 p-8 space-y-8">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-primary">
-                      <Zap className="h-4 w-4 fill-primary" />
-                      <span className="text-xs font-black uppercase tracking-widest">
-                        Gemini Engine Analysis
+                      <Zap className="h-5 w-5 fill-primary" />
+                      <span className="text-sm font-black uppercase tracking-[0.2em]">
+                        Gemini Pro Intelligence
                       </span>
                     </div>
                     <Badge
                       variant="outline"
-                      className="border-primary/30 text-primary text-[10px] font-bold bg-background/50"
+                      className="border-primary/30 text-primary text-[10px] font-bold bg-background/50 px-3 py-1 rounded-full"
                     >
-                      Real-time Intelligence
+                      Neural Audit Log
                     </Badge>
                   </div>
-                  <p className="text-sm font-medium leading-relaxed text-foreground">
-                    {selectedAlert.aiSummary}
-                  </p>
-                  <div className="pt-2 flex items-center gap-4">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-9 rounded-xl border-primary/30 text-xs font-bold text-primary hover:bg-primary/10"
-                      disabled={actionLoading}
-                      onClick={() => handleResolve(selectedAlert.id)}
-                    >
-                      {actionLoading ? "Mitigating..." : "Mitigation Strategy"}
-                    </Button>
+
+                  {/* Summary & Reasoning */}
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
+                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10">
+                      {selectedAlert.data?.reasoning || selectedAlert.aiSummary}
+                    </p>
+                  </div>
+
+                  {/* Root Cause & Consequences */}
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                         Root Cause Analysis
+                      </h5>
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02]">
+                        {selectedAlert.data?.cause || "Identifying trigger vector..."}
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                         Potential Impact
+                      </h5>
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02]">
+                        {selectedAlert.data?.consequences || "Assessing protocol solvency..."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mitigation Strategy */}
+                  {selectedAlert.data?.mitigationStrategy && (
+                    <div className="space-y-3 pt-2">
+                      <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                         Technical Mitigation Strategy
+                      </h5>
+                      <div className="text-xs font-bold leading-relaxed text-emerald-500/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] shadow-inner font-mono">
+                        {selectedAlert.data.mitigationStrategy}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Immediate Next Steps */}
+                  <div className="space-y-4">
+                    <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Critical Response Checklist</h5>
+                    <div className="space-y-2">
+                      {(selectedAlert.data?.nextSteps || ["Contact security team", "Monitor mempool", "Verify oracle health"]).map((step: string, i: number) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                            {i + 1}
+                          </div>
+                          <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">{step}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </section>
 
