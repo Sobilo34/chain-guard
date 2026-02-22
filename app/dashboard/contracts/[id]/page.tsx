@@ -434,6 +434,80 @@ export default function ContractDetailPage({
             </CardContent>
           </Card>
 
+          {/* Detailed Gemini AI Analysis */}
+          {data.latestScan && (
+            <div className="space-y-6">
+              <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
+                <Zap className="h-5 w-5 text-primary fill-primary" />
+                Gemini Pro Intelligence
+              </h3>
+              
+              <div className="rounded-[2.5rem] border border-primary/20 bg-primary/5 p-8 backdrop-blur-xl">
+                <div className="space-y-6">
+                  {/* Summary & Reasoning */}
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
+                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10">
+                      {data.latestScan.reasoning}
+                    </p>
+                  </div>
+
+                  {/* Root Cause & Consequences */}
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                         Root Cause Analysis
+                      </h5>
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02]">
+                        {data.latestScan.cause || "No root cause identified."}
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                         Potential Impact
+                      </h5>
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02]">
+                        {data.latestScan.consequences || "Impact assessment pending."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mitigation Strategy */}
+                  {data.latestScan.mitigationStrategy && (
+                    <div className="space-y-3 pt-2">
+                      <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                         Technical Mitigation Strategy
+                      </h5>
+                      <div className="text-xs font-bold leading-relaxed text-emerald-500/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] shadow-inner font-mono">
+                        {data.latestScan.mitigationStrategy}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Immediate Next Steps */}
+                  {data.latestScan.nextSteps && data.latestScan.nextSteps.length > 0 && (
+                     <div className="space-y-4 pt-4 border-t border-primary/10">
+                       <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Action Items</h5>
+                       <div className="space-y-2">
+                         {data.latestScan.nextSteps.map((step: string, i: number) => (
+                           <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
+                             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                               {i + 1}
+                             </div>
+                             <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">{step}</span>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* AI Strategy Insights */}
           <div className="space-y-6">
             <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">

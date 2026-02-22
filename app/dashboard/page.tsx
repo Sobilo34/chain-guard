@@ -227,7 +227,32 @@ const erc20Abi = parseAbi([
   "function decimals() view returns (uint8)",
 ]);
 
-const TESTNET_CHAINS = {
+const SUPPORTED_CHAINS = {
+  ethereumMainnet: {
+    label: "Ethereum Mainnet",
+    chainSelectorName: "ethereum-mainnet",
+    rpcUrl: "https://rpc.ankr.com/eth",
+  },
+  arbitrumMainnet: {
+    label: "Arbitrum Mainnet",
+    chainSelectorName: "ethereum-mainnet-arbitrum-1",
+    rpcUrl: "https://rpc.ankr.com/arbitrum",
+  },
+  optimismMainnet: {
+    label: "Optimism Mainnet",
+    chainSelectorName: "ethereum-mainnet-optimism-1",
+    rpcUrl: "https://rpc.ankr.com/optimism",
+  },
+  baseMainnet: {
+    label: "Base Mainnet",
+    chainSelectorName: "ethereum-mainnet-base-1",
+    rpcUrl: "https://rpc.ankr.com/base",
+  },
+  polygonMainnet: {
+    label: "Polygon Mainnet",
+    chainSelectorName: "polygon-mainnet",
+    rpcUrl: "https://rpc.ankr.com/polygon",
+  },
   sepolia: {
     label: "Ethereum Sepolia",
     chainSelectorName: "ethereum-testnet-sepolia",
@@ -276,7 +301,7 @@ const getChainConfig = (
     };
   }
 
-  const preset = TESTNET_CHAINS[chainKey as keyof typeof TESTNET_CHAINS];
+  const preset = SUPPORTED_CHAINS[chainKey as keyof typeof SUPPORTED_CHAINS];
   return {
     chainName: preset?.label || "Ethereum Sepolia",
     chainSelectorName: preset?.chainSelectorName || "ethereum-testnet-sepolia",
@@ -774,7 +799,7 @@ export default function DashboardPage() {
                       htmlFor="chain"
                       className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
                     >
-                      Chain (Testnet Only)
+                      Network
                     </Label>
                     <div className="relative">
                       <select
@@ -785,17 +810,34 @@ export default function DashboardPage() {
                         }
                         className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
                       >
-                        <option value="sepolia">Ethereum Sepolia</option>
-                        <option value="holesky">Ethereum Holesky</option>
-                        <option value="polygonAmoy">Polygon Amoy</option>
-                        <option value="arbitrumSepolia">
-                          Arbitrum Sepolia
-                        </option>
-                        <option value="optimismSepolia">
-                          Optimism Sepolia
-                        </option>
-                        <option value="baseSepolia">Base Sepolia</option>
-                        <option value="custom">Custom Testnet</option>
+                      <optgroup label="Mainnets">
+                          <option value="ethereumMainnet">
+                            Ethereum Mainnet
+                          </option>
+                          <option value="arbitrumMainnet">
+                            Arbitrum Mainnet
+                          </option>
+                          <option value="optimismMainnet">
+                            Optimism Mainnet
+                          </option>
+                          <option value="baseMainnet">Base Mainnet</option>
+                          <option value="polygonMainnet">
+                            Polygon Mainnet
+                          </option>
+                        </optgroup>
+                        <optgroup label="Testnets">
+                          <option value="sepolia">Ethereum Sepolia</option>
+                          <option value="holesky">Ethereum Holesky</option>
+                          <option value="polygonAmoy">Polygon Amoy</option>
+                          <option value="arbitrumSepolia">
+                            Arbitrum Sepolia
+                          </option>
+                          <option value="optimismSepolia">
+                            Optimism Sepolia
+                          </option>
+                          <option value="baseSepolia">Base Sepolia</option>
+                          <option value="custom">Custom Testnet</option>
+                        </optgroup>
                       </select>
                       <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
                     </div>
@@ -1099,6 +1141,9 @@ export default function DashboardPage() {
                     <TableHead className="font-bold text-foreground/70 uppercase text-[10px]">
                       Risk Analysis
                     </TableHead>
+                    <TableHead className="hidden lg:table-cell font-bold text-foreground/70 uppercase text-[10px]">
+                      AI Assessment
+                    </TableHead>
                     <TableHead className="text-right font-bold text-foreground/70 uppercase text-[10px]">
                       TVL (USD)
                     </TableHead>
@@ -1134,6 +1179,14 @@ export default function DashboardPage() {
                       <TableCell>
                         {getRiskBadge(contract.riskLevel || "low")}
                       </TableCell>
+                      <TableCell className="hidden lg:table-cell max-w-[200px]">
+                        <div className="flex items-center gap-2">
+                          <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="text-xs text-muted-foreground truncate" title={(contract as any)?.latestScan?.reasoning || "No recent scan data"}>
+                            {(contract as any)?.latestScan?.reasoning || "Awaiting Gemini analysis..."}
+                          </span>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="text-sm font-black tabular-nums">
                           {contract.tvl || "$0.00"}
@@ -1161,7 +1214,7 @@ export default function DashboardPage() {
                   {filteredContracts.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="h-40 text-center text-muted-foreground"
                       >
                         No contracts found matching your search.

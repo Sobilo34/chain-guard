@@ -38,7 +38,7 @@ import {
   ShieldCheck,
   Globe,
 } from "lucide-react";
-import { getContracts, runGeminiScan, type DashboardContract } from "@/lib/api";
+import { getContracts, runGeminiScan, addContract, type DashboardContract } from "@/lib/api";
 
 const getRiskBadge = (level: string) => {
   const normalizedLevel = (level || "low").toLowerCase();
@@ -168,6 +168,7 @@ export default function ContractsPage() {
     customChainSelectorName: "",
     customRpcUrl: "",
     customChainId: "",
+    priceFeeds: [] as { asset: string; feedAddress: string }[],
   });
 
   useEffect(() => {
@@ -204,6 +205,31 @@ export default function ContractsPage() {
     }
 
     const preset = {
+      ethereumMainnet: {
+        label: "Ethereum Mainnet",
+        chainSelectorName: "ethereum-mainnet",
+        rpcUrl: "https://rpc.ankr.com/eth",
+      },
+      arbitrumMainnet: {
+        label: "Arbitrum Mainnet",
+        chainSelectorName: "ethereum-mainnet-arbitrum-1",
+        rpcUrl: "https://rpc.ankr.com/arbitrum",
+      },
+      optimismMainnet: {
+        label: "Optimism Mainnet",
+        chainSelectorName: "ethereum-mainnet-optimism-1",
+        rpcUrl: "https://rpc.ankr.com/optimism",
+      },
+      baseMainnet: {
+        label: "Base Mainnet",
+        chainSelectorName: "ethereum-mainnet-base-1",
+        rpcUrl: "https://rpc.ankr.com/base",
+      },
+      polygonMainnet: {
+        label: "Polygon Mainnet",
+        chainSelectorName: "polygon-mainnet",
+        rpcUrl: "https://rpc.ankr.com/polygon",
+      },
       sepolia: {
         label: "Ethereum Sepolia",
         chainSelectorName: "ethereum-testnet-sepolia",
@@ -234,13 +260,15 @@ export default function ContractsPage() {
         chainSelectorName: "ethereum-testnet-sepolia-base-1",
         rpcUrl: "https://rpc.ankr.com/base_sepolia",
       },
-    }[newContract.chain as keyof typeof preset];
+    } as const;
+
+    const presetValue = preset[newContract.chain as keyof typeof preset];
 
     return {
-      chainName: preset?.label || "Ethereum Sepolia",
+      chainName: presetValue?.label || "Ethereum Sepolia",
       chainSelectorName:
-        preset?.chainSelectorName || "ethereum-testnet-sepolia",
-      rpcUrl: preset?.rpcUrl || "https://rpc.ankr.com/eth_sepolia",
+        presetValue?.chainSelectorName || "ethereum-testnet-sepolia",
+      rpcUrl: presetValue?.rpcUrl || "https://rpc.ankr.com/eth_sepolia",
     };
   };
 
@@ -272,6 +300,7 @@ export default function ContractsPage() {
         : undefined,
       name: newContract.name || fallbackName,
       protocol: newContract.protocol || "Normal",
+      priceFeeds: newContract.priceFeeds,
       alertChannels: ["email"],
     });
 
@@ -289,6 +318,7 @@ export default function ContractsPage() {
       customChainSelectorName: "",
       customRpcUrl: "",
       customChainId: "",
+      priceFeeds: [],
     });
     setIsAddDialogOpen(false);
   };
@@ -418,7 +448,7 @@ export default function ContractsPage() {
                     htmlFor="chain"
                     className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
                   >
-                    Network (Testnet Only)
+                    Network
                   </Label>
                   <div className="relative">
                     <select
@@ -432,13 +462,22 @@ export default function ContractsPage() {
                       }
                       className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
                     >
-                      <option value="sepolia">Ethereum Sepolia</option>
-                      <option value="holesky">Ethereum Holesky</option>
-                      <option value="polygonAmoy">Polygon Amoy</option>
-                      <option value="arbitrumSepolia">Arbitrum Sepolia</option>
-                      <option value="optimismSepolia">Optimism Sepolia</option>
-                      <option value="baseSepolia">Base Sepolia</option>
-                      <option value="custom">Custom Testnet</option>
+                      <optgroup label="Mainnets">
+                        <option value="ethereumMainnet">Ethereum Mainnet</option>
+                        <option value="arbitrumMainnet">Arbitrum Mainnet</option>
+                        <option value="optimismMainnet">Optimism Mainnet</option>
+                        <option value="baseMainnet">Base Mainnet</option>
+                        <option value="polygonMainnet">Polygon Mainnet</option>
+                      </optgroup>
+                      <optgroup label="Testnets">
+                        <option value="sepolia">Ethereum Sepolia</option>
+                        <option value="holesky">Ethereum Holesky</option>
+                        <option value="polygonAmoy">Polygon Amoy</option>
+                        <option value="arbitrumSepolia">Arbitrum Sepolia</option>
+                        <option value="optimismSepolia">Optimism Sepolia</option>
+                        <option value="baseSepolia">Base Sepolia</option>
+                        <option value="custom">Custom Testnet</option>
+                      </optgroup>
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   </div>
@@ -471,6 +510,73 @@ export default function ContractsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Price Feeds Section */}
+              <div className="space-y-4 rounded-xl border border-border/40 bg-muted/20 p-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider">
+                    Chainlink Data Feeds
+                  </Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-lg text-xs font-bold"
+                    onClick={() =>
+                      setNewContract({
+                        ...newContract,
+                        priceFeeds: [
+                          ...newContract.priceFeeds,
+                          { asset: "", feedAddress: "" },
+                        ],
+                      })
+                    }
+                  >
+                    <Plus className="mr-1 h-3 w-3" /> Add Feed
+                  </Button>
+                </div>
+                {newContract.priceFeeds.map((feed, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Asset (e.g., ETH/USD)"
+                      className="h-10 rounded-lg text-sm"
+                      value={feed.asset}
+                      onChange={(e) => {
+                        const newFeeds = [...newContract.priceFeeds];
+                        newFeeds[idx].asset = e.target.value;
+                        setNewContract({ ...newContract, priceFeeds: newFeeds });
+                      }}
+                    />
+                    <Input
+                      placeholder="Feed Address"
+                      className="h-10 rounded-lg text-sm font-mono"
+                      value={feed.feedAddress}
+                      onChange={(e) => {
+                        const newFeeds = [...newContract.priceFeeds];
+                        newFeeds[idx].feedAddress = e.target.value;
+                        setNewContract({ ...newContract, priceFeeds: newFeeds });
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-10 w-10 shrink-0 text-rose-500 hover:bg-rose-500/10"
+                      onClick={() => {
+                        const newFeeds = [...newContract.priceFeeds];
+                        newFeeds.splice(idx, 1);
+                        setNewContract({ ...newContract, priceFeeds: newFeeds });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+                {newContract.priceFeeds.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-border/40 p-3 text-center text-xs text-muted-foreground">
+                    Optional: Add custom price feeds for deep market sensing. Network defaults will be used if none provided.
+                  </div>
+                )}
+              </div>
+
               {newContract.chain === "custom" && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
