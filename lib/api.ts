@@ -12,8 +12,23 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   })
 
   if (!res.ok) {
-    const body = await res.text()
-    throw new Error(`API ${res.status}: ${body}`)
+    let message = res.statusText || "Request failed"
+    try {
+      const raw = await res.text()
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw)
+          message =
+            (parsed && (parsed.error || parsed.message)) ||
+            raw
+        } catch {
+          message = raw
+        }
+      }
+    } catch {
+      // ignore body parsing errors and fall back to statusText
+    }
+    throw new Error(`API ${res.status}: ${message}`)
   }
 
   return res.json() as Promise<T>

@@ -66,6 +66,7 @@ import {
 } from "lucide-react";
 import { getContractDetail } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { toast } from "@/components/ui/toast";
 
 interface HistoryItem {
   time: string;
@@ -94,14 +95,22 @@ export default function ContractDetailPage({
   const { id: contractAddress } = use(params);
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDetail = async () => {
       try {
         const detail = await getContractDetail(contractAddress);
         setData(detail);
-      } catch (err) {
+        setError(null);
+      } catch (err: any) {
         console.error("Failed to fetch contract detail", err);
+        const message =
+          typeof err?.message === "string" ? err.message : String(err || "Unknown error");
+        setError(message);
+        toast.error("Failed to load contract detail", {
+          description: message,
+        });
       } finally {
         setLoading(false);
       }
@@ -133,7 +142,9 @@ export default function ContractDetailPage({
               Terminal Locked
             </h2>
             <p className="text-slate-400 font-medium">
-              The requested oracle stream is not registered in the ecosystem.
+              {error
+                ? `Failed to load contract detail: ${error}`
+                : "The requested oracle stream is not registered in the ecosystem."}
             </p>
           </div>
           <Link href="/dashboard/contracts">

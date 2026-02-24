@@ -39,6 +39,7 @@ import {
   Globe,
 } from "lucide-react";
 import { getContracts, runGeminiScan, addContract, type DashboardContract } from "@/lib/api";
+import { toast } from "@/components/ui/toast";
 
 const getRiskBadge = (level: string) => {
   const normalizedLevel = (level || "low").toLowerCase();
@@ -327,9 +328,16 @@ export default function ContractsPage() {
     try {
       setIsScanning(true);
       await runGeminiScan();
-      alert("System-wide scan initiated across all registered contracts.");
-    } catch (err) {
+      toast.success("Global scan started", {
+        description: "System-wide scan initiated across all registered contracts.",
+      });
+    } catch (err: any) {
       console.error("Global scan failed", err);
+      const message =
+        typeof err?.message === "string" ? err.message : String(err || "Unknown error");
+      toast.error("Global scan failed", {
+        description: message,
+      });
     } finally {
       setIsScanning(false);
     }
@@ -339,9 +347,16 @@ export default function ContractsPage() {
     try {
       setIsScanning(true);
       await runGeminiScan({ contractAddress: address });
-      alert(`Targeted scan initiated for contract ${address}`);
-    } catch (err) {
+      toast.success("Contract scan started", {
+        description: `Targeted scan initiated for ${address}`,
+      });
+    } catch (err: any) {
       console.error("Contract scan failed", err);
+      const message =
+        typeof err?.message === "string" ? err.message : String(err || "Unknown error");
+      toast.error("Contract scan failed", {
+        description: `${address}: ${message}`,
+      });
     } finally {
       setIsScanning(false);
     }
