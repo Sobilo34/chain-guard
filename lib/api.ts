@@ -146,7 +146,7 @@ export async function addContract(payload: {
 }
 
 export async function discoverContract(address: string, network: string) {
-  return fetchJson<{ discovery: any; suggestedRequest: any }>(
+  return fetchJson<{ discovery: any; suggestedRequest: any; preliminaryAssessment: any }>(
     `${API_BASE_URL}/api/contracts/discover`,
     {
       method: "POST",
