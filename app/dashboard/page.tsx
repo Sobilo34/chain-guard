@@ -48,6 +48,7 @@ import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import {
   getOverview,
   addContract,
+  discoverContract,
   runGeminiScan,
   type DashboardAlert,
   type DashboardContract,
@@ -221,93 +222,9 @@ const formatLastSync = (value: string) => {
   return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
 };
 
-const erc20Abi = parseAbi([
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-]);
+// (erc20Abi removed as manual detection is handled by backend discovery)
 
-const SUPPORTED_CHAINS = {
-  ethereumMainnet: {
-    label: "Ethereum Mainnet",
-    chainSelectorName: "ethereum-mainnet",
-    rpcUrl: "https://rpc.ankr.com/eth",
-  },
-  arbitrumMainnet: {
-    label: "Arbitrum Mainnet",
-    chainSelectorName: "ethereum-mainnet-arbitrum-1",
-    rpcUrl: "https://rpc.ankr.com/arbitrum",
-  },
-  optimismMainnet: {
-    label: "Optimism Mainnet",
-    chainSelectorName: "ethereum-mainnet-optimism-1",
-    rpcUrl: "https://rpc.ankr.com/optimism",
-  },
-  baseMainnet: {
-    label: "Base Mainnet",
-    chainSelectorName: "ethereum-mainnet-base-1",
-    rpcUrl: "https://rpc.ankr.com/base",
-  },
-  polygonMainnet: {
-    label: "Polygon Mainnet",
-    chainSelectorName: "polygon-mainnet",
-    rpcUrl: "https://rpc.ankr.com/polygon",
-  },
-  sepolia: {
-    label: "Ethereum Sepolia",
-    chainSelectorName: "ethereum-testnet-sepolia",
-    rpcUrl: "https://rpc.ankr.com/eth_sepolia",
-  },
-  holesky: {
-    label: "Ethereum Holesky",
-    chainSelectorName: "ethereum-testnet-holesky",
-    rpcUrl: "https://rpc.ankr.com/eth_holesky",
-  },
-  polygonAmoy: {
-    label: "Polygon Amoy",
-    chainSelectorName: "polygon-testnet-amoy",
-    rpcUrl: "https://rpc.ankr.com/polygon_amoy",
-  },
-  arbitrumSepolia: {
-    label: "Arbitrum Sepolia",
-    chainSelectorName: "ethereum-testnet-sepolia-arbitrum-1",
-    rpcUrl: "https://rpc.ankr.com/arbitrum_sepolia",
-  },
-  optimismSepolia: {
-    label: "Optimism Sepolia",
-    chainSelectorName: "ethereum-testnet-sepolia-optimism-1",
-    rpcUrl: "https://rpc.ankr.com/optimism_sepolia",
-  },
-  baseSepolia: {
-    label: "Base Sepolia",
-    chainSelectorName: "ethereum-testnet-sepolia-base-1",
-    rpcUrl: "https://rpc.ankr.com/base_sepolia",
-  },
-};
-
-const getChainConfig = (
-  chainKey: string,
-  custom?: {
-    chainName?: string;
-    chainSelectorName?: string;
-    rpcUrl?: string;
-  },
-) => {
-  if (chainKey === "custom") {
-    return {
-      chainName: custom?.chainName || "Custom Testnet",
-      chainSelectorName: custom?.chainSelectorName || "custom-testnet",
-      rpcUrl: custom?.rpcUrl || "",
-    };
-  }
-
-  const preset = SUPPORTED_CHAINS[chainKey as keyof typeof SUPPORTED_CHAINS];
-  return {
-    chainName: preset?.label || "Ethereum Sepolia",
-    chainSelectorName: preset?.chainSelectorName || "ethereum-testnet-sepolia",
-    rpcUrl: preset?.rpcUrl || "https://rpc.ankr.com/eth_sepolia",
-  };
-};
+// (SUPPORTED_CHAINS and getChainConfig removed as configuration is handled by discovery API)
 
 export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -471,79 +388,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDetectMetadata = async () => {
-    if (!addForm.address.trim()) return;
-
-    setIsDetecting(true);
-    setDetectMessage(null);
-    try {
-      const chainConfig = getChainConfig(addForm.chain, {
-        chainName: addForm.customChainName,
-        chainSelectorName: addForm.customChainSelectorName,
-        rpcUrl: addForm.customRpcUrl,
-      });
-
-      if (!chainConfig.rpcUrl) {
-        setDetectMessage(
-          "Please provide a custom RPC URL for metadata detection.",
-        );
-        return;
-      }
-
-      const client = createPublicClient({
-        transport: http(chainConfig.rpcUrl),
-      });
-
-      const [nameResult, symbolResult, decimalsResult] =
-        await Promise.allSettled([
-          client.readContract({
-            address: addForm.address as `0x${string}`,
-            abi: erc20Abi,
-            functionName: "name",
-          }),
-          client.readContract({
-            address: addForm.address as `0x${string}`,
-            abi: erc20Abi,
-            functionName: "symbol",
-          }),
-          client.readContract({
-            address: addForm.address as `0x${string}`,
-            abi: erc20Abi,
-            functionName: "decimals",
-          }),
-        ]);
-
-      const name =
-        nameResult.status === "fulfilled" ? nameResult.value : undefined;
-      const symbol =
-        symbolResult.status === "fulfilled" ? symbolResult.value : undefined;
-      const decimals =
-        decimalsResult.status === "fulfilled"
-          ? decimalsResult.value
-          : undefined;
-
-      if (name || symbol) {
-        setAddForm((prev) => ({
-          ...prev,
-          name: prev.name || String(name || symbol),
-        }));
-        setDetectMessage(
-          `Detected token metadata${decimals !== undefined ? ` (${decimals} decimals)` : ""}.`,
-        );
-      } else {
-        setDetectMessage(
-          "Metadata not detected. Please enter details manually.",
-        );
-      }
-    } catch {
-      setDetectMessage(
-        "Metadata lookup failed. Please enter details manually.",
-      );
-    } finally {
-      setIsDetecting(false);
-    }
-  };
-
   const handleAddContract = async () => {
     const address = addForm.address.trim();
     const isAddressValid = /^0x[a-fA-F0-9]{40}$/.test(address);
@@ -551,50 +395,33 @@ export default function DashboardPage() {
       setAddError("Please enter a valid 0x contract address.");
       return;
     }
-    if (!addForm.protocol) {
-      setAddError("Please select a protocol type.");
-      return;
-    }
-
-    const chainConfig = getChainConfig(addForm.chain, {
-      chainName: addForm.customChainName,
-      chainSelectorName: addForm.customChainSelectorName,
-      rpcUrl: addForm.customRpcUrl,
-    });
-
-    if (addForm.chain === "custom") {
-      if (
-        !addForm.customChainName ||
-        !addForm.customChainSelectorName ||
-        !addForm.customRpcUrl
-      ) {
-        setAddError("Provide custom chain name, selector, and RPC URL.");
-        return;
-      }
-    }
 
     setIsAdding(true);
     setAddError(null);
+    setDetectMessage("Intelligently discovering contract metadata...");
+    
     try {
-      const fallbackName = `${addForm.protocol} ${address.slice(0, 6)}...${address.slice(-4)}`;
+      // 1. Discover contract metadata and suggestions
+    const discoveryResult = await discoverContract(address, addForm.chain);
+    const { discovery, suggestedRequest, preliminaryAssessment } = discoveryResult;
 
-      await addContract({
-        address,
-        chain: chainConfig.chainSelectorName,
-        chainSelectorName: chainConfig.chainSelectorName,
-        chainName: chainConfig.chainName,
-        rpcUrl: chainConfig.rpcUrl,
-        chainId: addForm.customChainId
-          ? Number(addForm.customChainId)
-          : undefined,
-        name: addForm.name || fallbackName,
-        protocol: addForm.protocol,
-        riskThresholds: getRiskThresholds(addForm.riskProfile),
-        alertChannels: ["email"],
-      });
+    const balanceInfo = discovery.nativeBalance ? `${discovery.nativeBalance.balance} ${discovery.nativeBalance.symbol}` : '0 ETH';
+    setDetectMessage(`Scanned: ${discovery.type} ${discovery.name || 'Contract'}. Found ${balanceInfo} and ${discovery.tokens.length} tokens.`);
 
-      const response = await getOverview();
-      const data = response.data;
+    // 2. Add contract using suggested configuration
+    await addContract({
+      ...suggestedRequest,
+      initialAssessment: preliminaryAssessment,
+      // Ensure we pass the essential fields from our form or defaults
+      alertChannels: ["email"],
+      riskThresholds: suggestedRequest.riskThresholds || getRiskThresholds(addForm.riskProfile),
+    });
+
+      // 3. Refresh overview
+      const overviewResponse = await getOverview();
+      const data = overviewResponse.data;
+      
+      // Update state with new data
       setLiveKpis([
         {
           title: "Monitored Contracts",
@@ -639,6 +466,7 @@ export default function DashboardPage() {
         lastSync: data.system.lastSync,
       });
 
+      // Reset form and close dialog
       setAddForm({
         address: "",
         chain: "sepolia",
@@ -654,7 +482,7 @@ export default function DashboardPage() {
       setIsAddDialogOpen(false);
     } catch (err) {
       console.error("Failed to add contract", err);
-      setAddError("Failed to add contract. Check bridge API availability.");
+      setAddError("Failed to auto-discover and add contract. Check API availability.");
     } finally {
       setIsAdding(false);
     }
@@ -770,8 +598,7 @@ export default function DashboardPage() {
                   Add new contract to monitor
                 </DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Provide the chain, protocol, and address so the bridge API can
-                  start monitoring.
+                  Provide the contract address and network. Our AI will automatically discover implementation details, held tokens, and mapping feeds.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 py-4">
@@ -838,30 +665,6 @@ export default function DashboardPage() {
                           <option value="baseSepolia">Base Sepolia</option>
                           <option value="custom">Custom Testnet</option>
                         </optgroup>
-                      </select>
-                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="protocol"
-                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
-                    >
-                      Protocol Type
-                    </Label>
-                    <div className="relative">
-                      <select
-                        id="protocol"
-                        value={addForm.protocol}
-                        onChange={(e) =>
-                          setAddForm({ ...addForm, protocol: e.target.value })
-                        }
-                        className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      >
-                        <option value="Normal">Normal</option>
-                        <option value="Diamond">Diamond</option>
-                        <option value="UUPS">UUPS</option>
-                        <option value="Other">Other</option>
                       </select>
                       <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
                     </div>
@@ -953,75 +756,24 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="name"
-                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
-                    >
-                      Contract Name (optional)
-                    </Label>
-                    <Input
-                      id="name"
-                      placeholder="e.g., Uniswap V3 Pool"
-                      className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
-                      value={addForm.name}
-                      onChange={(e) =>
-                        setAddForm({ ...addForm, name: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="risk"
-                      className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
-                    >
-                      Risk Profile
-                    </Label>
-                    <div className="relative">
-                      <select
-                        id="risk"
-                        value={addForm.riskProfile}
-                        onChange={(e) =>
-                          setAddForm({
-                            ...addForm,
-                            riskProfile: e.target.value,
-                          })
-                        }
-                        className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
-                      >
-                        <option value="conservative">Conservative</option>
-                        <option value="balanced">Balanced</option>
-                        <option value="aggressive">Aggressive</option>
-                      </select>
-                      <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/40 bg-muted/20 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Auto-detect metadata
+                <div className="flex flex-col gap-2 p-4 rounded-2xl border border-border/40 bg-primary/5">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-primary animate-pulse" />
+                    <p className="text-xs font-bold text-primary uppercase tracking-tight">
+                      Intelligent Discovery Active
                     </p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Uses a public RPC to read ERC-20 name/symbol.
-                    </p>
-                    {detectMessage && (
-                      <p className="text-[11px] text-primary mt-1">
-                        {detectMessage}
-                      </p>
-                    )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isDetecting}
-                    onClick={handleDetectMetadata}
-                    className="h-9 rounded-xl border-border/40"
-                  >
-                    {isDetecting ? "Detecting..." : "Detect"}
-                  </Button>
+                  <p className="text-[11px] text-muted-foreground">
+                    System will automatically fetch protocol name, contract type (Proxy/Diamond), and map tokens to Chainlink feeds.
+                  </p>
+                  {detectMessage && (
+                    <motion.p 
+                      initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
+                      className="text-[11px] font-semibold text-primary/80 italic"
+                    >
+                      {detectMessage}
+                    </motion.p>
+                  )}
                 </div>
                 {addError && (
                   <p className="text-sm text-rose-500 font-medium">
