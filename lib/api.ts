@@ -1,5 +1,79 @@
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_CHAIN_GUARD_API_URL || "http://localhost:4100"
+import { ContractStorage } from "./storage";
+
+export const API_BASE_URL = "/api/cre";
+
+export type DashboardContract = {
+  id: string;
+  name: string;
+  address: string;
+  tvl: string;
+  riskLevel: "low" | "medium" | "high";
+  volatility: string;
+  chain: string;
+  chainSelectorName?: string;
+  status?: string;
+  lastUpdate?: string;
+  latestScan?: any;
+  metrics?: {
+    tvl?: number;
+    price?: number;
+    volume24h?: number;
+    liquidity?: number;
+    volatility?: number;
+    [key: string]: any;
+  };
+  history?: {
+    volatility?: Array<{ time: string; value: number }>;
+    riskScore?: Array<{ time: string; value: number }>;
+  };
+  priceFeeds?: Array<{ pairName: string; feedAddress: string; decimals: number }>;
+  riskThresholds?: Record<string, any>;
+};
+
+export type DashboardAlert = {
+  id: string;
+  timestamp: string;
+  contract: string;
+  contractName?: string;
+  description?: string;
+  type: string;
+  severity: "low" | "medium" | "high";
+  status: "active" | "acknowledged" | "resolved";
+};
+
+export type OverviewPayload = {
+  kpis: {
+    monitoredContracts: number;
+    activeAlerts: number;
+    totalValueLocked: number;
+    riskScore: number;
+  };
+  contracts: DashboardContract[];
+  alerts: DashboardAlert[];
+  system: {
+    oracle: string;
+    riskEngine: string;
+    alertService: string;
+    lastSync: string;
+  };
+};
+
+export type ScanResult = {
+  riskLevel: string;
+  riskType: string;
+  confidence: number;
+  reasoning: string;
+  suggestedActions: string[];
+  affectedMetrics?: string[];
+  estimatedImpact?: string;
+  source?: string;
+  quotaExceeded?: boolean;
+};
+
+export type AlertPayload = {
+  alerts: DashboardAlert[];
+  total: number;
+};
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -9,161 +83,116 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
       ...(init?.headers || {}),
     },
     cache: "no-store",
-  })
+  });
 
   if (!res.ok) {
-    let message = res.statusText || "Request failed"
-    try {
-      const raw = await res.text()
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw)
-          message =
-            (parsed && (parsed.error || parsed.message)) ||
-            raw
-        } catch {
-          message = raw
-        }
-      }
-    } catch {
-      // ignore body parsing errors and fall back to statusText
-    }
-    throw new Error(`API ${res.status}: ${message}`)
+    const raw = await res.text();
+    throw new Error(`API ${res.status}: ${raw}`);
   }
 
-  return res.json() as Promise<T>
+  return res.json() as Promise<T>;
 }
 
-export type DashboardContract = {
-  id: string
-  name: string
-  address: string
-  tvl: string
-  riskLevel: "low" | "medium" | "high"
-  volatility: string
-  chain: string
-  chainSelectorName?: string
-  status?: string
-  lastUpdate?: string
+export async function getOverview(): Promise<{ data: OverviewPayload }> {
+  // Use ContractStorage for overview
+  return { data: ContractStorage.getOverview() };
 }
 
-export type DashboardAlert = {
-  id: string
-  timestamp: string
-  contract: string
-  contractName?: string
-  description?: string
-  type: string
-  severity: "low" | "medium" | "high"
-  status: "active" | "acknowledged" | "resolved"
+export async function getContracts(): Promise<{ contracts: DashboardContract[] }> {
+  return { contracts: ContractStorage.getContracts() };
 }
 
-export type OverviewPayload = {
-  kpis: {
-    monitoredContracts: number
-    activeAlerts: number
-    totalValueLocked: number
-    riskScore: number
+export async function getContractDetail(address: string): Promise<any> {
+  const contracts = ContractStorage.getContracts();
+  const contract = contracts.find((c) => c.address.toLowerCase() === address.toLowerCase());
+  if (contract) {
+    const riskScore = (contract as any).riskScore ||
+      (contract.status === "CRITICAL" ? 92 :
+        contract.status === "HIGH" ? 78 :
+          contract.status === "MEDIUM" ? 45 : 15);
+    return { ...contract, riskScore };
   }
-  contracts: DashboardContract[]
-  alerts: DashboardAlert[]
-  system: {
-    oracle: string
-    riskEngine: string
-    alertService: string
-    lastSync: string
-  }
+  return null;
 }
 
-export type ScanResult = {
-  riskLevel: string
-  riskType: string
-  confidence: number
-  reasoning: string
-  suggestedActions: string[]
-  affectedMetrics?: string[]
-  estimatedImpact?: string
-  source?: string
-  quotaExceeded?: boolean
-}
+export async function addContract(payload: any): Promise<DashboardContract> {
+  // Use ContractStorage to save the contract locally
+  const newContract = ContractStorage.addContract({
+    name: payload.name || "Unknown",
+    address: payload.address,
+    chain: payload.chain,
+    chainSelectorName: payload.chainSelectorName,
+    tvl: "$0.0M", // Initial TVL
+    riskLevel: (payload.initialAssessment?.riskLevel?.toLowerCase() as any) || "low",
+    volatility: "0.0%",
+    status: payload.initialAssessment?.riskLevel || "LOW",
+    latestScan: payload.initialAssessment,
+    priceFeeds: payload.priceFeeds,
+    riskThresholds: payload.riskThresholds
+  });
 
-export interface AlertPayload {
-  alerts: {
-    id: string
-    contractAddress: string
-    severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
-    message: string
-    details?: Record<string, any>
-    timestamp: string
-    resolved?: boolean
-    resolvedAt?: string
-  }[]
-  total: number
-}
-
-export async function getOverview() {
-  return fetchJson<{ data: OverviewPayload }>(`${API_BASE_URL}/api/overview`)
-}
-
-export async function getContracts() {
-  return fetchJson<{ contracts: DashboardContract[] }>(`${API_BASE_URL}/api/contracts`)
-}
-
-export async function getContractDetail(address: string) {
-  return fetchJson<any>(`${API_BASE_URL}/api/contracts/${address}/detail`)
-}
-
-export async function addContract(payload: {
-  address: string
-  chain: string
-  chainSelectorName?: string
-  chainName?: string
-  rpcUrl?: string
-  chainId?: number
-  name?: string
-  protocol: string
-  riskThresholds?: {
-    volatility: number
-    liquidity: number
-    concentration: number
-    overall?: number
-  }
-  priceFeeds?: { asset: string; feedAddress: string; decimals?: number }[]
-  alertChannels?: Array<"email">
-}) {
-  const response = await fetchJson<{ data: DashboardContract }>(
-    `${API_BASE_URL}/api/contracts`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        ...payload,
-        protocol: payload.protocol || "Normal",
-        alertChannels: payload.alertChannels?.length ? payload.alertChannels : ["email"],
-      }),
-    },
-  )
-  return response.data
+  return newContract;
 }
 
 export async function discoverContract(address: string, network: string) {
   return fetchJson<{ discovery: any; suggestedRequest: any; preliminaryAssessment: any }>(
-    `${API_BASE_URL}/api/contracts/discover`,
+    `${API_BASE_URL}/discover`,
     {
       method: "POST",
       body: JSON.stringify({ address, network }),
     }
-  )
+  );
 }
 
 export async function runGeminiScan(payload?: {
-  contractAddress?: string
-  chainSelectorName?: string
-  contractName?: string
+  contractAddress?: string;
+  chainSelectorName?: string;
+  contractName?: string;
 }) {
-  return fetchJson<{ data: ScanResult }>(`${API_BASE_URL}/api/scan`, {
-    method: "POST",
-    body: JSON.stringify(payload || {}),
-  })
+  const contracts = ContractStorage.getContracts();
+  const response = await fetchJson<{ success: boolean; assessments: any[]; rawOutput?: string; error?: string }>(
+    `${API_BASE_URL}/simulate`,
+    {
+      method: "POST",
+      body: JSON.stringify({ contracts }),
+    }
+  );
+
+  if (response.success && response.assessments.length > 0) {
+    // Update local storage with new assessments
+    response.assessments.forEach((assessment) => {
+      ContractStorage.updateContract(assessment.contractAddress, {
+        riskLevel: assessment.riskLevel.toLowerCase() as any,
+        status: assessment.riskLevel,
+        latestScan: {
+          ...(assessment.latestScan || assessment),
+          rawOutput: response.rawOutput // Store full logs context within each asset's scan data
+        },
+        metrics: assessment.metrics,
+      });
+
+      // If risk is high, add an alert
+      if (assessment.riskLevel === "HIGH" || assessment.riskLevel === "CRITICAL") {
+        ContractStorage.addAlert({
+          timestamp: new Date().toISOString(),
+          contract: assessment.contractAddress,
+          contractName: contracts.find(c => c.address.toLowerCase() === assessment.contractAddress.toLowerCase())?.name || "Unknown",
+          type: "High Risk Detected",
+          description: assessment.reasoning || "Gemini detected high risk during scan.",
+          severity: assessment.riskLevel.toLowerCase() as any,
+          status: "active"
+        });
+      }
+    });
+    ContractStorage.updateSyncTimestamp();
+  }
+
+  return {
+    data: {
+      quotaExceeded: response.error?.includes("429")
+    } as ScanResult,
+    rawOutput: response.rawOutput
+  };
 }
 
 export async function getAlerts(
@@ -172,47 +201,52 @@ export async function getAlerts(
   limit: number = 50,
   offset: number = 0
 ): Promise<AlertPayload> {
-  const params = new URLSearchParams()
-  if (address) params.append("address", address)
-  if (severity) params.append("severity", severity)
-  params.append("limit", limit.toString())
-  params.append("offset", offset.toString())
-
-  const response = await fetch(`${API_BASE_URL}/api/alerts?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+  let alerts = ContractStorage.getAlerts();
+  if (address) {
+    alerts = alerts.filter(a => a.contract.toLowerCase() === address.toLowerCase());
   }
-  return response.json()
+  if (severity) {
+    alerts = alerts.filter(a => a.severity.toLowerCase() === severity.toLowerCase());
+  }
+
+  const total = alerts.length;
+  alerts = alerts.slice(offset, offset + limit);
+
+  return { alerts, total };
 }
 
 export async function getAlertEmail() {
-  return fetchJson<{ email: string | null }>(`${API_BASE_URL}/api/notifications/email`)
+  const email = typeof window !== "undefined" ? localStorage.getItem("chainguard_alert_email") : null;
+  return { email };
 }
 
 export async function setAlertEmail(email: string) {
-  return fetchJson<{ success: boolean; email: string }>(`${API_BASE_URL}/api/notifications/email`, {
-    method: "PUT",
-    body: JSON.stringify({ email }),
-  })
+  if (typeof window !== "undefined") {
+    localStorage.setItem("chainguard_alert_email", email);
+  }
+  return { success: true, email };
 }
 
 export async function acknowledgeAlert(alertId: string) {
-  return fetchJson<{ success: boolean }>(`${API_BASE_URL}/api/alerts/${alertId}/acknowledge`, {
-    method: "POST",
-  })
+  const alerts = ContractStorage.getAlerts();
+  const index = alerts.findIndex(a => a.id === alertId);
+  if (index !== -1) {
+    alerts[index].status = "acknowledged";
+    ContractStorage.saveAlerts(alerts);
+  }
+  return { success: true };
 }
 
 export async function resolveAlert(alertId: string) {
-  return fetchJson<{ success: boolean }>(`${API_BASE_URL}/api/alerts/${alertId}/resolve`, {
-    method: "POST",
-  })
+  const alerts = ContractStorage.getAlerts();
+  const index = alerts.findIndex(a => a.id === alertId);
+  if (index !== -1) {
+    alerts[index].status = "resolved";
+    ContractStorage.saveAlerts(alerts);
+  }
+  return { success: true };
 }
 
 export async function triggerTestEmail() {
-  return fetchJson<{ success: boolean; message: string }>(
-    `${API_BASE_URL}/api/notifications/test`,
-    {
-      method: "POST",
-    }
-  );
+  return { success: true, message: "Test alert simulated locally." };
 }

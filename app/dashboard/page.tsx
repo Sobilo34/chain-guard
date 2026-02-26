@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import * as framerMotion from "framer-motion";
 const motion =
@@ -227,6 +228,7 @@ const formatLastSync = (value: string) => {
 // (SUPPORTED_CHAINS and getChainConfig removed as configuration is handled by discovery API)
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [liveKpis, setLiveKpis] = useState<any[]>([]);
   const [liveContracts, setLiveContracts] = useState<DashboardContract[]>([]);
@@ -244,6 +246,8 @@ export default function DashboardPage() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [detectMessage, setDetectMessage] = useState<string | null>(null);
+  const [rawLogs, setRawLogs] = useState<string | null>(null);
+  const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [addForm, setAddForm] = useState({
     address: "",
     chain: "sepolia",
@@ -264,7 +268,7 @@ export default function DashboardPage() {
         const response = await getOverview();
         const data = response.data;
 
-        const mappedKpis = [
+        setLiveKpis([
           {
             title: "Monitored Contracts",
             value: `${data.kpis.monitoredContracts}`,
@@ -299,9 +303,7 @@ export default function DashboardPage() {
             bgColor:
               data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
           },
-        ];
-
-        setLiveKpis(mappedKpis);
+        ]);
         setLiveContracts(data.contracts);
         setLiveAlerts(data.alerts);
         setSystemStatus({
@@ -333,7 +335,8 @@ export default function DashboardPage() {
 
   const handleQuickScan = async () => {
     setIsScanning(true);
-    setScanMessage(null);
+    setScanMessage("Initializing CRE Simulator...");
+    setRawLogs(null);
     try {
       const first = liveContracts[0];
       const scanResponse = await runGeminiScan(
@@ -345,17 +348,74 @@ export default function DashboardPage() {
             }
           : undefined,
       );
+      
+      if (scanResponse.rawOutput) {
+        setRawLogs(scanResponse.rawOutput);
+      }
+
       if (scanResponse.data.quotaExceeded) {
         setScanMessage("Gemini quota exceeded — showing fallback assessment.");
       } else {
-        setScanMessage("Gemini scan complete.");
+        setScanMessage("Scan complete. Updating dashboard...");
       }
+
+      // Re-fetch overview to show new alerts/scores
+      setScanMessage("Scan complete. Syncing state...");
+      
+      // Force a slight delay to ensure localStorage write is finished on all threads
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
       const response = await getOverview();
-      if (response.data.alerts.length > 0) {
-        setLiveAlerts(response.data.alerts);
-      }
-    } catch {
-      setScanMessage("Scan failed. Check bridge API and Gemini config.");
+      const data = response.data;
+      
+      console.log("Dashboard re-fetched data:", data.contracts);
+      
+      setLiveContracts([...data.contracts]); // Create a new array to trigger React reactivity
+      setLiveAlerts([...data.alerts]);
+      setLiveKpis([
+        {
+          title: "Monitored Contracts",
+          value: `${data.kpis.monitoredContracts}`,
+          change: "Live from bridge API",
+          icon: FileCode2,
+          color: "text-primary",
+          bgColor: "bg-primary/10",
+        },
+        {
+          title: "Active Alerts",
+          value: `${data.kpis.activeAlerts}`,
+          change: `${data.kpis.activeAlerts} currently active`,
+          icon: AlertTriangle,
+          color: "text-danger",
+          bgColor: "bg-danger/10",
+        },
+        {
+          title: "Total Value Locked",
+          value: `$${(data.kpis.totalValueLocked / 1000000).toFixed(1)}M`,
+          change: "Derived from monitored contracts",
+          icon: TrendingUp,
+          color: "text-success",
+          bgColor: "bg-success/10",
+        },
+        {
+          title: "Risk Score",
+          value: `${data.kpis.riskScore}/100`,
+          change: data.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing",
+          icon: ShieldCheck,
+          color: data.kpis.riskScore >= 70 ? "text-warning" : "text-success",
+          bgColor: data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
+        },
+      ]);
+      
+      setScanMessage("Dashboard updated.");
+      
+      // Notify other tabs/components that storage changed
+      window.dispatchEvent(new Event('storage'));
+      
+      setTimeout(() => setScanMessage(null), 5000);
+    } catch (err) {
+      setScanMessage("Scan failed. Check bridge API and terminal logs.");
+      console.error(err);
     } finally {
       setIsScanning(false);
     }
@@ -365,25 +425,25 @@ export default function DashboardPage() {
     switch (profile) {
       case "conservative":
         return {
-          volatility: 0.1,
-          liquidity: 0.12,
-          concentration: 0.15,
-          overall: 0.2,
+          volatilityMax: 0.1,
+          liquidityDropMax: 0.12,
+          depegTolerance: 0.005,
+          collateralRatioMin: 1.8,
         };
       case "aggressive":
         return {
-          volatility: 0.25,
-          liquidity: 0.3,
-          concentration: 0.35,
-          overall: 0.4,
+          volatilityMax: 0.25,
+          liquidityDropMax: 0.3,
+          depegTolerance: 0.05,
+          collateralRatioMin: 1.1,
         };
       case "balanced":
       default:
         return {
-          volatility: 0.15,
-          liquidity: 0.2,
-          concentration: 0.25,
-          overall: 0.3,
+          volatilityMax: 0.15,
+          liquidityDropMax: 0.2,
+          depegTolerance: 0.02,
+          collateralRatioMin: 1.5,
         };
     }
   };
@@ -567,6 +627,45 @@ export default function DashboardPage() {
               </span>
             </div>
           </div>
+
+          {scanMessage && (
+            <motion.div 
+               initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+               className="flex items-center gap-2 rounded-xl bg-primary/5 px-4 py-2 border border-primary/20"
+            >
+              <Activity className="h-3.5 w-3.5 text-primary animate-pulse" />
+              <span className="text-xs font-bold text-primary italic">{scanMessage}</span>
+            </motion.div>
+          )}
+
+          {rawLogs && (
+            <Dialog open={isLogsOpen} onOpenChange={setIsLogsOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="h-10 rounded-xl border-border/40 hover:bg-primary/5">
+                  <FileCode2 className="mr-2 h-4 w-4 text-primary" />
+                  Simulation Logs
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col rounded-3xl border-border/40 bg-card/90 backdrop-blur-2xl">
+                <DialogHeader>
+                  <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                    <Activity className="h-5 w-5 text-primary" />
+                    CRE Simulation Output
+                  </DialogTitle>
+                  <DialogDescription>
+                    Real-time execution logs from the Chainlink Sentinel environment.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex-1 overflow-auto mt-4 rounded-xl bg-slate-950 p-6 font-mono text-[11px] leading-relaxed text-slate-300 border border-border/20">
+                  <pre className="whitespace-pre-wrap">{rawLogs}</pre>
+                </div>
+                <DialogFooter>
+                  <Button className="rounded-xl font-bold" onClick={() => setIsLogsOpen(false)}>Close Logs</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           <Button
             size="lg"
             variant="outline"
@@ -906,7 +1005,8 @@ export default function DashboardPage() {
                   {filteredContracts.map((contract) => (
                     <TableRow
                       key={contract.address}
-                      className="group border-border/20 transition-all hover:bg-primary/[0.03]"
+                      onClick={() => router.push(`/dashboard/contracts/${contract.id || contract.address}`)}
+                      className="group border-border/20 transition-all hover:bg-primary/[0.03] cursor-pointer"
                     >
                       <TableCell className="px-7 py-5">
                         <div className="flex items-center gap-3">
@@ -933,8 +1033,8 @@ export default function DashboardPage() {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell max-w-[200px]">
                         <div className="flex items-center gap-2">
-                          <Zap className="h-3.5 w-3.5 text-primary shrink-0" />
-                          <span className="text-xs text-muted-foreground truncate" title={(contract as any)?.latestScan?.reasoning || "No recent scan data"}>
+                          <Zap className={cn("h-3.5 w-3.5 shrink-0", (contract as any)?.latestScan?.reasoning ? "text-primary animate-pulse" : "text-muted-foreground")} />
+                          <span className={cn("text-xs truncate font-medium", (contract as any)?.latestScan?.reasoning ? "text-foreground" : "text-muted-foreground")} title={(contract as any)?.latestScan?.reasoning || "No recent scan data"}>
                             {(contract as any)?.latestScan?.reasoning || "Awaiting Gemini analysis..."}
                           </span>
                         </div>
