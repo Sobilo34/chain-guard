@@ -64,7 +64,7 @@ import {
   Zap,
   ChevronRight,
 } from "lucide-react";
-import { getContractDetail } from "@/lib/api";
+import { getContractDetail, runAnalyze, type AnalyzeResult } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
 
@@ -96,6 +96,8 @@ export default function ContractDetailPage({
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(null);
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -120,6 +122,31 @@ export default function ContractDetailPage({
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const networkFromContract = data?.chain || (() => {
+    const sel = (data?.chainSelectorName || "").toLowerCase();
+    if (sel.includes("arbitrum") && !sel.includes("sepolia")) return "arbitrumMainnet";
+    if (sel.includes("optimism") && !sel.includes("sepolia")) return "optimismMainnet";
+    if (sel.includes("base") && !sel.includes("sepolia")) return "baseMainnet";
+    if (sel.includes("polygon") && !sel.includes("amoy")) return "polygonMainnet";
+    return "ethereumMainnet";
+  })();
+
+  const handleFullAnalysis = async () => {
+    if (!data?.address) return;
+    setAnalyzeLoading(true);
+    setAnalyzeResult(null);
+    try {
+      const result = await runAnalyze(data.address, networkFromContract);
+      setAnalyzeResult(result);
+      toast.success("Full analysis complete", { description: "Pre-CRE, CRE, and post-CRE analysis ready." });
+    } catch (err: any) {
+      const msg = err?.message || "Analysis failed";
+      toast.error("Analysis failed", { description: msg });
+    } finally {
+      setAnalyzeLoading(false);
+    }
   };
 
   if (loading) {
@@ -327,6 +354,15 @@ export default function ContractDetailPage({
         >
           <Button
             variant="outline"
+            disabled={analyzeLoading}
+            onClick={handleFullAnalysis}
+            className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
+          >
+            <Sparkles className={cn("mr-2 h-4 w-4", analyzeLoading && "animate-pulse")} />
+            {analyzeLoading ? "Analyzing…" : "Full Analysis"}
+          </Button>
+          <Button
+            variant="outline"
             className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
           >
             <Settings className="mr-2 h-4 w-4" />
@@ -393,6 +429,91 @@ export default function ContractDetailPage({
           </motion.div>
         ))}
       </div>
+
+      {/* Full Analysis (Pre-CRE + CRE + Post-CRE) */}
+      {analyzeResult && (
+        <Card className="overflow-hidden rounded-[2.5rem] border-border/40 bg-card/20 backdrop-blur-xl">
+          <CardHeader className="border-b border-border/40 px-8 py-6">
+            <CardTitle className="flex items-center gap-2 text-xl font-black tracking-tight">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Full Analysis
+            </CardTitle>
+            <CardDescription className="text-xs font-medium text-muted-foreground">
+              Pre-CRE AI analysis, CRE observations, and post-CRE AI analysis with key points.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-8 space-y-8">
+            <Accordion type="multiple" className="w-full">
+              <AccordionItem value="pre-cre" className="border border-border/40 rounded-2xl px-4 mb-4">
+                <AccordionTrigger className="text-sm font-bold uppercase tracking-wider text-primary/90 hover:no-underline py-4">
+                  Pre-CRE analysis (AI from contract context)
+                </AccordionTrigger>
+                <AccordionContent className="pb-4 text-sm text-muted-foreground space-y-3">
+                  {analyzeResult.initialAnalysis?.summary && (
+                    <p className="leading-relaxed">{analyzeResult.initialAnalysis.summary}</p>
+                  )}
+                  {analyzeResult.initialAnalysis?.keyRisks?.length ? (
+                    <ul className="list-disc pl-5 space-y-1">
+                      {analyzeResult.initialAnalysis.keyRisks.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {analyzeResult.initialAnalysis?.recommendations?.length ? (
+                    <div>
+                      <span className="font-semibold text-foreground">Recommendations: </span>
+                      <ul className="list-disc pl-5 mt-1">
+                        {analyzeResult.initialAnalysis.recommendations.map((rec, i) => (
+                          <li key={i}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="cre" className="border border-border/40 rounded-2xl px-4 mb-4">
+                <AccordionTrigger className="text-sm font-bold uppercase tracking-wider text-primary/90 hover:no-underline py-4">
+                  CRE observations
+                </AccordionTrigger>
+                <AccordionContent className="pb-4 text-sm text-muted-foreground">
+                  {analyzeResult.creObservations && (
+                    <pre className="rounded-xl bg-muted/30 p-4 overflow-x-auto text-xs whitespace-pre-wrap font-mono">
+                      {JSON.stringify(analyzeResult.creObservations, null, 2)}
+                    </pre>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="post-cre" className="border border-border/40 rounded-2xl px-4">
+                <AccordionTrigger className="text-sm font-bold uppercase tracking-wider text-primary/90 hover:no-underline py-4">
+                  Post-CRE analysis (AI from CRE results)
+                </AccordionTrigger>
+                <AccordionContent className="pb-4 text-sm text-muted-foreground space-y-3">
+                  {analyzeResult.finalAnalysis?.summary && (
+                    <p className="leading-relaxed">{analyzeResult.finalAnalysis.summary}</p>
+                  )}
+                  {analyzeResult.finalAnalysis?.keyFindings?.length ? (
+                    <ul className="list-disc pl-5 space-y-1">
+                      {analyzeResult.finalAnalysis.keyFindings.map((f, i) => (
+                        <li key={i}>{f}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {analyzeResult.finalAnalysis?.comparisonWithPreCRE && (
+                    <p className="leading-relaxed"><span className="font-semibold text-foreground">Comparison with pre-CRE: </span>{analyzeResult.finalAnalysis.comparisonWithPreCRE}</p>
+                  )}
+                  {analyzeResult.finalAnalysis?.recommendations?.length ? (
+                    <ul className="list-disc pl-5 space-y-1">
+                      {analyzeResult.finalAnalysis.recommendations.map((r, i) => (
+                        <li key={i}>{r}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Grid */}
       <div className="grid gap-8 lg:grid-cols-3">

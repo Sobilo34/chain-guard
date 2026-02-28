@@ -58,14 +58,14 @@ const DEFAULT_ENTRIES: Array<{
   },
   {
     address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-    name: "RISK_MOCK: USDT Depeg Scenario",
+    name: "USDT Stablecoin (Tether)",
     chainSelectorName: "ethereum-mainnet",
-    riskThresholds: { depegTolerance: 0.01, volatilityMax: 0.1, liquidityDropMax: 0.2 },
+    riskThresholds: { depegTolerance: 0.01, volatilityMax: 0.1, liquidityDropMax: 0.2, collateralRatioMin: 1.5 },
     priceFeeds: [{ pairName: "USDT/USD", feedAddress: "0x3E7d1eA13978982C58110906476e3FFf87208e59", decimals: 8 }],
-    tvl: "$45.2M",
-    riskLevel: "high",
-    status: "CRITICAL",
-    volatility: "85.0%",
+    tvl: "$0.0M",
+    riskLevel: "low",
+    status: "LOW",
+    volatility: "0.0%",
   },
 ];
 

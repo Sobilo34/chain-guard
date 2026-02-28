@@ -12,23 +12,45 @@ const CRE_PROJECT_PATH = process.env.CRE_PROJECT_PATH || "/home/bilal/bilal_proj
 const SENTINEL_PATH = path.join(CRE_PROJECT_PATH, "chainguard-sentinel");
 const CONFIG_PATH = path.join(SENTINEL_PATH, "config.json");
 
+/** Single contract shape for on-demand analyze (AI-derived feeds + thresholds) */
+type AnalyzeContract = {
+    address: string;
+    name: string;
+    chainSelectorName: string;
+    riskThresholds: { depegTolerance?: number; volatilityMax?: number; liquidityDropMax?: number; collateralRatioMin?: number };
+    priceFeeds: Array<{ pairName: string; feedAddress: string; decimals: number }>;
+};
+
 export async function POST(req: NextRequest) {
     try {
+        let analyzeContract: AnalyzeContract | undefined;
         try {
-            await req.json(); // consume body; we use hardcoded defaults for config
+            const body = await req.json();
+            analyzeContract = body?.analyzeContract;
         } catch {
             // empty or invalid JSON is fine
         }
 
         const defaultContracts = getDefaultContractsCRE();
-        // 1. Sync config.json with monitored contracts (same as dashboard seed – lib/default-contracts.ts)
+        const contractsToUse = analyzeContract
+            ? [{
+                address: analyzeContract.address.toLowerCase().startsWith("0x") ? analyzeContract.address.toLowerCase() : `0x${analyzeContract.address.toLowerCase()}`,
+                name: analyzeContract.name,
+                chainSelectorName: analyzeContract.chainSelectorName,
+                riskThresholds: analyzeContract.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
+                alertChannels: ["email"] as const,
+                priceFeeds: analyzeContract.priceFeeds?.length ? analyzeContract.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419", decimals: 8 }],
+            }]
+            : defaultContracts.map((c) => ({ ...c }));
+
+        // 1. Sync config.json with monitored contracts (or single contract for analyze)
         let currentConfig: Record<string, unknown> = {
             openRouterModel: "google/gemini-2.0-flash-001",
             cronSchedule: "*/15 * * * *",
-            monitoredContracts: defaultContracts.map((c) => ({ ...c })),
+            monitoredContracts: contractsToUse,
             gasLimit: "1000000",
             verboseLogging: true,
-            maxContractsPerRun: 10,
+            maxContractsPerRun: Math.max(1, contractsToUse.length),
             aiTimeoutMs: 30000,
         };
 
@@ -42,8 +64,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Always write the same default contracts so CRE and dashboard stay in sync
-        currentConfig.monitoredContracts = defaultContracts.map((c) => ({ ...c }));
+        currentConfig.monitoredContracts = contractsToUse;
 
         // Pass OpenRouter key into config so CRE workflow can use it (config.json is gitignored)
         if (process.env.OPENROUTER_API_KEY) {
@@ -104,12 +125,12 @@ export async function POST(req: NextRequest) {
         }
         console.log(`Found ${assessments.length} valid assessments in simulation output.`);
 
-        // If CRE returned no assessments (e.g. API key missing, timeout), return one per default contract
-        // so the dashboard still updates and we don't show "no contract results"
+        // If CRE returned no assessments (e.g. API key missing, timeout), return fallback per expected contract(s)
         let finalAssessments = assessments;
-        if (assessments.length === 0 && defaultContracts.length > 0) {
-            finalAssessments = defaultContracts.map((c) => ({
-                contractAddress: c.address.toLowerCase().startsWith("0x") ? c.address.toLowerCase() : `0x${c.address.toLowerCase()}`,
+        const fallbackSource = analyzeContract ? contractsToUse : defaultContracts;
+        if (assessments.length === 0 && fallbackSource.length > 0) {
+            finalAssessments = fallbackSource.map((c: any) => ({
+                contractAddress: (c.address || "").toLowerCase().startsWith("0x") ? (c.address || "").toLowerCase() : `0x${(c.address || "").toLowerCase()}`,
                 riskLevel: "LOW",
                 riskScore: 25,
                 latestScan: {
@@ -118,7 +139,7 @@ export async function POST(req: NextRequest) {
                     consequences: "Dashboard shows fallback status until next successful scan.",
                 },
             }));
-            console.log(`Returning ${finalAssessments.length} fallback assessments for default contracts.`);
+            console.log(`Returning ${finalAssessments.length} fallback assessments.`);
         }
 
         return NextResponse.json({

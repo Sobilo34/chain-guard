@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, parseAbi, Address, formatUnits } from "viem";
-import { sepolia, mainnet, arbitrum, optimism, base, polygon } from "viem/chains";
+import { mainnet, arbitrum, optimism, base, polygon } from "viem/chains";
+import { getWellKnownFeeds } from "@/lib/cre/feeds";
 
-// Configuration
+// Configuration – mainnet only
 const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 
 const NETWORKS: Record<string, any> = {
-    sepolia: { chain: sepolia, name: "Ethereum Sepolia", selector: "ethereum-testnet-sepolia" },
     ethereumMainnet: { chain: mainnet, name: "Ethereum Mainnet", selector: "ethereum-mainnet" },
+    mainnet: { chain: mainnet, name: "Ethereum Mainnet", selector: "ethereum-mainnet" },
     arbitrumMainnet: { chain: arbitrum, name: "Arbitrum Mainnet", selector: "arbitrum-mainnet" },
     optimismMainnet: { chain: optimism, name: "Optimism Mainnet", selector: "optimism-mainnet" },
     baseMainnet: { chain: base, name: "Base Mainnet", selector: "base-mainnet" },
     polygonMainnet: { chain: polygon, name: "Polygon Mainnet", selector: "polygon-mainnet" },
-    arbitrumSepolia: { chain: arbitrum, name: "Arbitrum Sepolia", selector: "arbitrum-testnet-sepolia" },
-    optimismSepolia: { chain: optimism, name: "Optimism Sepolia", selector: "optimism-testnet-sepolia" },
-    baseSepolia: { chain: base, name: "Base Sepolia", selector: "base-testnet-sepolia" },
-    polygonAmoy: { chain: polygon, name: "Polygon Amoy", selector: "polygon-testnet-amoy" },
 };
 
 export async function POST(req: NextRequest) {
@@ -26,7 +23,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Address is required" }, { status: 400 });
         }
 
-        const netConfig = NETWORKS[network] || NETWORKS.sepolia;
+        const netConfig = NETWORKS[network] || NETWORKS.ethereumMainnet;
         const client = createPublicClient({
             chain: netConfig.chain,
             transport: http(),
@@ -152,22 +149,25 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 6. Map to Feeds
+        // 6. Map detected tokens + native balance to data feeds (Chainlink or other). All detected feeds are used by CRE for alerts.
         const wellKnownFeeds = getWellKnownFeeds(network);
-        const priceFeeds = tokens
-            .filter(t => wellKnownFeeds[t.symbol])
-            .map(t => ({
-                asset: t.symbol,
-                feedAddress: wellKnownFeeds[t.symbol],
-                decimals: 8 // Chainlink USD feeds are usually 8 decimals
-            }));
+        const priceFeeds: Array<{ pairName: string; feedAddress: string; decimals: number }> = [];
 
-        // Add native feed if available
+        for (const t of tokens) {
+            const feedAddr = wellKnownFeeds[t.symbol];
+            if (feedAddr) {
+                priceFeeds.push({
+                    pairName: `${t.symbol}/USD`,
+                    feedAddress: feedAddr,
+                    decimals: 8,
+                });
+            }
+        }
         if (wellKnownFeeds[nativeBalance.symbol]) {
             priceFeeds.push({
-                asset: nativeBalance.symbol,
+                pairName: `${nativeBalance.symbol}/USD`,
                 feedAddress: wellKnownFeeds[nativeBalance.symbol],
-                decimals: 8
+                decimals: 8,
             });
         }
 
@@ -177,12 +177,11 @@ export async function POST(req: NextRequest) {
             type,
             implementation,
             tokens,
-            suggestedFeeds: priceFeeds,
-            nativeBalance
+            nativeBalance,
+            dataFeedsDetected: priceFeeds.map((f) => ({ pairName: f.pairName, feedAddress: f.feedAddress })),
         };
 
-        // Find depeg feed if any
-        const depegFeed = priceFeeds.find(f => f.asset === 'USDC' || f.asset === 'USDT' || f.asset === 'DAI');
+        const hasStablecoin = priceFeeds.some((f) => ["USDC/USD", "USDT/USD", "DAI/USD"].includes(f.pairName));
 
         const suggestedRequest = {
             address,
@@ -194,10 +193,10 @@ export async function POST(req: NextRequest) {
             priceFeeds,
             riskThresholds: {
                 volatilityMax: 0.15,
-                liquidityDropMax: 0.20,
-                depegTolerance: depegFeed ? 0.01 : 0.05,
+                liquidityDropMax: 0.2,
+                depegTolerance: hasStablecoin ? 0.01 : 0.05,
                 collateralRatioMin: 1.5,
-            }
+            },
         };
 
         const preliminaryAssessment = {
@@ -228,39 +227,21 @@ export async function POST(req: NextRequest) {
 
 function getCommonTokens(network: string): string[] {
     const net = network.toLowerCase();
-    if (net === "sepolia" || net.includes("sepolia")) {
-        return [
-            "0x779877A7B0D9E8603169DdbD7836e478b4624789", // LINK
-            "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", // UNI
-            "0x94a101C247558622CB1837F8E3C5791E8e384C66", // USDC
-        ];
-    } else if (net.includes("mainnet")) {
+    if (net.includes("mainnet")) {
+        if (net.includes("polygon")) {
+            return [
+                "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174", // USDC
+                "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", // USDT
+                "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", // WMATIC
+            ];
+        }
         return [
             "0x514910771af9ca656af840dff83e8264ecf986ca", // LINK
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
-            "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
+            "0x6B175474E89094C44Da98b954EedeAC495271d0F",   // DAI
         ];
     }
     return [];
 }
 
-function getWellKnownFeeds(network: string): Record<string, string> {
-    const net = network.toLowerCase();
-    if (net.includes("sepolia")) {
-        return {
-            LINK: "0xc59E35335d05115184891401E7A4468f70217d03",
-            UNI: "0x103734a340F66373e33Be57aB7242138a0D03De5",
-            USDC: "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
-            ETH: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
-            MATIC: "0x001382149eBa3441043c1c66972b4772963f5D43",
-        };
-    } else if (net.includes("mainnet")) {
-        return {
-            LINK: "0x2c1d072e956affC0D435Cb7AC38EF18d24d9127c",
-            USDC: "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
-            USDT: "0x3E7d1eA13978D9E831cf0AF209A321Aa333D7266",
-            ETH: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
-        };
-    }
-    return {};
-}

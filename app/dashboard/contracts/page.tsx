@@ -118,32 +118,11 @@ const getChainInfo = (chain: string) => {
     string,
     { color: string; name: string; symbol: string }
   > = {
-    "ethereum-testnet-sepolia": {
-      color: "#627EEA",
-      name: "Sepolia",
-      symbol: "SEP",
-    },
-    "ethereum-testnet-holesky": {
-      color: "#627EEA",
-      name: "Holesky",
-      symbol: "HOL",
-    },
-    "polygon-testnet-amoy": { color: "#8247E5", name: "Amoy", symbol: "AMOY" },
-    "ethereum-testnet-sepolia-arbitrum-1": {
-      color: "#28A0F0",
-      name: "Arbitrum Sepolia",
-      symbol: "ARB",
-    },
-    "ethereum-testnet-sepolia-optimism-1": {
-      color: "#FF0420",
-      name: "Optimism Sepolia",
-      symbol: "OP",
-    },
-    "ethereum-testnet-sepolia-base-1": {
-      color: "#0052FF",
-      name: "Base Sepolia",
-      symbol: "BASE",
-    },
+    "ethereum-mainnet": { color: "#627EEA", name: "Ethereum", symbol: "ETH" },
+    "arbitrum-mainnet": { color: "#28A0F0", name: "Arbitrum", symbol: "ARB" },
+    "optimism-mainnet": { color: "#FF0420", name: "Optimism", symbol: "OP" },
+    "base-mainnet": { color: "#0052FF", name: "Base", symbol: "BASE" },
+    "polygon-mainnet": { color: "#8247E5", name: "Polygon", symbol: "MATIC" },
   };
   return (
     chains[normalizedChain] || {
@@ -163,7 +142,7 @@ export default function ContractsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newContract, setNewContract] = useState({
     address: "",
-    chain: "sepolia",
+    chain: "ethereumMainnet",
     name: "",
     protocol: "Normal",
     customChainName: "",
@@ -197,7 +176,7 @@ export default function ContractsPage() {
   }, []);
 
   const getChainConfig = () => {
-    if (newContract.chain === "custom") {
+    if (newContract.chain === "customMainnet") {
       return {
         chainName: newContract.customChainName || "Custom Testnet",
         chainSelectorName:
@@ -224,7 +203,7 @@ export default function ContractsPage() {
       },
       baseMainnet: {
         label: "Base Mainnet",
-        chainSelectorName: "ethereum-mainnet-base-1",
+        chainSelectorName: "base-mainnet",
         rpcUrl: "https://rpc.ankr.com/base",
       },
       polygonMainnet: {
@@ -232,52 +211,22 @@ export default function ContractsPage() {
         chainSelectorName: "polygon-mainnet",
         rpcUrl: "https://rpc.ankr.com/polygon",
       },
-      sepolia: {
-        label: "Ethereum Sepolia",
-        chainSelectorName: "ethereum-testnet-sepolia",
-        rpcUrl: "https://rpc.ankr.com/eth_sepolia",
-      },
-      holesky: {
-        label: "Ethereum Holesky",
-        chainSelectorName: "ethereum-testnet-holesky",
-        rpcUrl: "https://rpc.ankr.com/eth_holesky",
-      },
-      polygonAmoy: {
-        label: "Polygon Amoy",
-        chainSelectorName: "polygon-testnet-amoy",
-        rpcUrl: "https://rpc.ankr.com/polygon_amoy",
-      },
-      arbitrumSepolia: {
-        label: "Arbitrum Sepolia",
-        chainSelectorName: "ethereum-testnet-sepolia-arbitrum-1",
-        rpcUrl: "https://rpc.ankr.com/arbitrum_sepolia",
-      },
-      optimismSepolia: {
-        label: "Optimism Sepolia",
-        chainSelectorName: "ethereum-testnet-sepolia-optimism-1",
-        rpcUrl: "https://rpc.ankr.com/optimism_sepolia",
-      },
-      baseSepolia: {
-        label: "Base Sepolia",
-        chainSelectorName: "ethereum-testnet-sepolia-base-1",
-        rpcUrl: "https://rpc.ankr.com/base_sepolia",
-      },
     } as const;
 
     const presetValue = preset[newContract.chain as keyof typeof preset];
 
     return {
-      chainName: presetValue?.label || "Ethereum Sepolia",
+      chainName: presetValue?.label || "Ethereum Mainnet",
       chainSelectorName:
-        presetValue?.chainSelectorName || "ethereum-testnet-sepolia",
-      rpcUrl: presetValue?.rpcUrl || "https://rpc.ankr.com/eth_sepolia",
+        presetValue?.chainSelectorName || "ethereum-mainnet",
+      rpcUrl: presetValue?.rpcUrl || "https://rpc.ankr.com/eth",
     };
   };
 
   const handleAddContract = async () => {
     if (!newContract.address.trim()) return;
 
-    if (newContract.chain === "custom") {
+    if (newContract.chain === "customMainnet") {
       if (
         !newContract.customChainName ||
         !newContract.customChainSelectorName ||
@@ -313,7 +262,7 @@ export default function ContractsPage() {
 
     setNewContract({
       address: "",
-      chain: "sepolia",
+      chain: "ethereumMainnet",
       name: "",
       protocol: "Normal",
       customChainName: "",
@@ -478,22 +427,12 @@ export default function ContractsPage() {
                       }
                       className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
                     >
-                      <optgroup label="Mainnets">
-                        <option value="ethereumMainnet">Ethereum Mainnet</option>
-                        <option value="arbitrumMainnet">Arbitrum Mainnet</option>
-                        <option value="optimismMainnet">Optimism Mainnet</option>
-                        <option value="baseMainnet">Base Mainnet</option>
-                        <option value="polygonMainnet">Polygon Mainnet</option>
-                      </optgroup>
-                      <optgroup label="Testnets">
-                        <option value="sepolia">Ethereum Sepolia</option>
-                        <option value="holesky">Ethereum Holesky</option>
-                        <option value="polygonAmoy">Polygon Amoy</option>
-                        <option value="arbitrumSepolia">Arbitrum Sepolia</option>
-                        <option value="optimismSepolia">Optimism Sepolia</option>
-                        <option value="baseSepolia">Base Sepolia</option>
-                        <option value="custom">Custom Testnet</option>
-                      </optgroup>
+                      <option value="ethereumMainnet">Ethereum Mainnet</option>
+                      <option value="arbitrumMainnet">Arbitrum Mainnet</option>
+                      <option value="optimismMainnet">Optimism Mainnet</option>
+                      <option value="baseMainnet">Base Mainnet</option>
+                      <option value="polygonMainnet">Polygon Mainnet</option>
+                      <option value="customMainnet">Custom Mainnet</option>
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   </div>
@@ -593,7 +532,7 @@ export default function ContractsPage() {
                 )}
               </div>
 
-              {newContract.chain === "custom" && (
+              {newContract.chain === "customMainnet" && (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label
@@ -604,7 +543,7 @@ export default function ContractsPage() {
                     </Label>
                     <Input
                       id="customChainName"
-                      placeholder="e.g., Local Sepolia"
+                      placeholder="e.g., Custom Mainnet"
                       className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
                       value={newContract.customChainName}
                       onChange={(e) =>
@@ -624,7 +563,7 @@ export default function ContractsPage() {
                     </Label>
                     <Input
                       id="customChainSelector"
-                      placeholder="custom-testnet"
+                      placeholder="e.g., ethereum-mainnet"
                       className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
                       value={newContract.customChainSelectorName}
                       onChange={(e) =>
@@ -640,7 +579,7 @@ export default function ContractsPage() {
                       htmlFor="customRpcUrl"
                       className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
                     >
-                      RPC URL (Testnet)
+                      RPC URL
                     </Label>
                     <Input
                       id="customRpcUrl"
@@ -664,7 +603,7 @@ export default function ContractsPage() {
                     </Label>
                     <Input
                       id="customChainId"
-                      placeholder="11155111"
+                      placeholder="e.g., 1"
                       className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
                       value={newContract.customChainId}
                       onChange={(e) =>
@@ -722,18 +661,11 @@ export default function ContractsPage() {
               className="h-11 appearance-none rounded-2xl border border-border/40 bg-background/40 pl-9 pr-8 text-[13px] font-semibold focus:outline-none focus:ring-2 focus:ring-primary/10 transition-all"
             >
               <option value="all">All Networks</option>
-              <option value="ethereum-testnet-sepolia">Ethereum Sepolia</option>
-              <option value="ethereum-testnet-holesky">Ethereum Holesky</option>
-              <option value="polygon-testnet-amoy">Polygon Amoy</option>
-              <option value="ethereum-testnet-sepolia-arbitrum-1">
-                Arbitrum Sepolia
-              </option>
-              <option value="ethereum-testnet-sepolia-optimism-1">
-                Optimism Sepolia
-              </option>
-              <option value="ethereum-testnet-sepolia-base-1">
-                Base Sepolia
-              </option>
+              <option value="ethereum-mainnet">Ethereum Mainnet</option>
+              <option value="arbitrum-mainnet">Arbitrum Mainnet</option>
+              <option value="optimism-mainnet">Optimism Mainnet</option>
+              <option value="base-mainnet">Base Mainnet</option>
+              <option value="polygon-mainnet">Polygon Mainnet</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>

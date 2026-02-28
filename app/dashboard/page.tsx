@@ -146,46 +146,39 @@ const getStatusBadge = (status: string) => {
 
 const getChainBadge = (chain: string) => {
   switch (chain) {
-    case "ethereum-testnet-sepolia":
+    case "ethereum-mainnet":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-[#627EEA]" />
-          Sepolia
+          Ethereum
         </span>
       );
-    case "ethereum-testnet-holesky":
-      return (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-[#627EEA]" />
-          Holesky
-        </span>
-      );
-    case "polygon-testnet-amoy":
-      return (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span className="h-2 w-2 rounded-full bg-[#8247E5]" />
-          Amoy
-        </span>
-      );
-    case "ethereum-testnet-sepolia-arbitrum-1":
+    case "arbitrum-mainnet":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-[#28A0F0]" />
-          Arb Sep
+          Arbitrum
         </span>
       );
-    case "ethereum-testnet-sepolia-optimism-1":
+    case "optimism-mainnet":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-[#FF0420]" />
-          OP Sep
+          Optimism
         </span>
       );
-    case "ethereum-testnet-sepolia-base-1":
+    case "base-mainnet":
       return (
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-[#0052FF]" />
-          Base Sep
+          Base
+        </span>
+      );
+    case "polygon-mainnet":
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="h-2 w-2 rounded-full bg-[#8247E5]" />
+          Polygon
         </span>
       );
     default:
@@ -240,7 +233,7 @@ export default function DashboardPage() {
   const [detectMessage, setDetectMessage] = useState<string | null>(null);
   const [addForm, setAddForm] = useState({
     address: "",
-    chain: "sepolia",
+    chain: "ethereumMainnet",
     name: "",
     protocol: "Normal",
     riskProfile: "balanced",
@@ -521,7 +514,7 @@ export default function DashboardPage() {
       // Reset form and close dialog
       setAddForm({
         address: "",
-        chain: "sepolia",
+        chain: "ethereumMainnet",
         name: "",
         protocol: "Normal",
         riskProfile: "balanced",
@@ -731,26 +724,13 @@ export default function DashboardPage() {
                             Polygon Mainnet
                           </option>
                         </optgroup>
-                        <optgroup label="Testnets">
-                          <option value="sepolia">Ethereum Sepolia</option>
-                          <option value="holesky">Ethereum Holesky</option>
-                          <option value="polygonAmoy">Polygon Amoy</option>
-                          <option value="arbitrumSepolia">
-                            Arbitrum Sepolia
-                          </option>
-                          <option value="optimismSepolia">
-                            Optimism Sepolia
-                          </option>
-                          <option value="baseSepolia">Base Sepolia</option>
-                          <option value="custom">Custom Testnet</option>
-                        </optgroup>
                       </select>
                       <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
                     </div>
                   </div>
                 </div>
 
-                {addForm.chain === "custom" && (
+                {addForm.chain === "customMainnet" && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label
@@ -761,7 +741,7 @@ export default function DashboardPage() {
                       </Label>
                       <Input
                         id="customChainName"
-                        placeholder="e.g., Local Sepolia"
+                        placeholder="e.g., Custom mainnet"
                         className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
                         value={addForm.customChainName}
                         onChange={(e) =>
@@ -781,7 +761,7 @@ export default function DashboardPage() {
                       </Label>
                       <Input
                         id="customChainSelector"
-                        placeholder="custom-testnet"
+                        placeholder="e.g., ethereum-mainnet"
                         className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
                         value={addForm.customChainSelectorName}
                         onChange={(e) =>

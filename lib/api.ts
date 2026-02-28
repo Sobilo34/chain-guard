@@ -176,6 +176,22 @@ export async function discoverContract(address: string, network: string) {
   );
 }
 
+/** AI-first full analysis: contract context → AI config → CRE run → post-CRE AI analysis (mainnet only) */
+export type AnalyzeResult = {
+  contractContext: any;
+  initialAnalysis: { summary?: string; keyRisks?: string[]; recommendations?: string[] };
+  creObservations: any;
+  finalAnalysis: { summary?: string; keyFindings?: string[]; comparisonWithPreCRE?: string; recommendations?: string[] };
+  aiChosenConfig?: { priceFeedPairs?: string[]; riskThresholds?: any; resolvedPriceFeeds?: any[] };
+};
+
+export async function runAnalyze(address: string, network: string): Promise<AnalyzeResult> {
+  return fetchJson<AnalyzeResult>(`${API_BASE_URL}/analyze`, {
+    method: "POST",
+    body: JSON.stringify({ address, network }),
+  });
+}
+
 export async function runGeminiScan(payload?: {
   contractAddress?: string;
   chainSelectorName?: string;

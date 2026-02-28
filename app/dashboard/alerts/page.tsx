@@ -233,7 +233,9 @@ export default function AlertsPage() {
   const rawAlerts = data?.alerts || [];
 
   // Map backend alerts to frontend UI model
-  const alerts = rawAlerts.map((a: any) => ({
+  const alerts = rawAlerts.map((a: any) => {
+    const msg = a.message ?? "";
+    return {
     id: a.id,
     timestamp: new Date(a.timestamp).toLocaleTimeString([], {
       hour: "2-digit",
@@ -241,9 +243,9 @@ export default function AlertsPage() {
     }),
     contract: a.details?.contractName || "System Alert",
     contractAddress: a.contractAddress || "0x0",
-    type: a.message.split(":")[0] || "Anomaly",
-    message: a.message,
-    severity: a.severity.toLowerCase(),
+    type: msg.split(":")[0]?.trim() || "Anomaly",
+    message: msg,
+    severity: (a.severity ?? "medium").toLowerCase(),
     status: a.resolved ? "resolved" : "active",
     data: a.details || {},
     aiSummary:
@@ -251,13 +253,14 @@ export default function AlertsPage() {
     notificationHistory: [
       { channel: "Email", time: "Connected", status: "sent" },
     ],
-  }));
+  };
+  });
 
   const filteredAlerts = alerts.filter((alert: any) => {
     const matchesSearch =
       alert.contract.toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alert.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (alert.message ?? "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       alert.contractAddress.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesStatus =
