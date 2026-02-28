@@ -7,9 +7,11 @@ export type ContractScanResult = {
   reasoning?: string;
   cause?: string;
   consequences?: string;
+  estimatedImpact?: string;
   mitigationStrategy?: string;
   nextSteps?: string[];
   suggestedActions?: string[];
+  affectedMetrics?: string[];
   riskType?: string;
   riskLevel?: string;
 };

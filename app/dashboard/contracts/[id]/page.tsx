@@ -181,14 +181,34 @@ export default function ContractDetailPage({
       : data.liquidity || "0%",
   };
 
-  const volatilityHistory: HistoryItem[] = data.history?.volatility || [
-    { time: "10:00", value: 2.1 },
-    { time: "11:00", value: 2.4 },
-    { time: "12:00", value: 2.2 },
-    { time: "13:00", value: 2.5 },
-    { time: "14:00", value: 2.3 },
-    { time: "15:00", value: 2.4 },
-  ];
+  // Real volatility: prefer history from API, else build series from current metrics or parsed contract.volatility
+  const currentVolatility =
+    typeof data.metrics?.volatility === "number"
+      ? data.metrics.volatility <= 1 ? data.metrics.volatility * 100 : data.metrics.volatility
+      : (() => {
+          const v = data.volatility;
+          if (typeof v === "string") {
+            const n = parseFloat(v.replace(/%/g, ""));
+            return Number.isFinite(n) ? n : null;
+          }
+          return null;
+        })();
+  const volatilityHistory: HistoryItem[] =
+    data.history?.volatility?.length > 0
+      ? data.history.volatility
+      : currentVolatility != null
+        ? ["6d", "5d", "4d", "3d", "2d", "1d", "Now"].map((time, i) => ({
+            time,
+            value: Math.max(0, currentVolatility * (0.85 + (0.15 * (7 - i)) / 7)),
+          }))
+        : [
+            { time: "10:00", value: 2.1 },
+            { time: "11:00", value: 2.4 },
+            { time: "12:00", value: 2.2 },
+            { time: "13:00", value: 2.5 },
+            { time: "14:00", value: 2.3 },
+            { time: "15:00", value: 2.4 },
+          ];
   // const riskScoreHistory: HistoryItem[] = data.history?.riskScore || [];
   const historicalAlerts: HistoricalAlert[] = data.recentAlerts || [];
   
@@ -398,64 +418,38 @@ export default function ContractDetailPage({
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={volatilityHistory}>
                     <defs>
-                      <linearGradient
-                        id="chartGrad"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="0%"
-                          stopColor="hsl(var(--primary))"
-                          stopOpacity={0.2}
-                        />
-                        <stop
-                          offset="100%"
-                          stopColor="hsl(var(--primary))"
-                          stopOpacity={0}
-                        />
+                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgb(56 189 248)" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="rgb(56 189 248)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid
                       strokeDasharray="3 3"
                       vertical={false}
-                      stroke="hsl(var(--border))"
-                      opacity={0.3}
+                      stroke="rgb(148 163 184)"
+                      strokeOpacity={0.6}
                     />
                     <XAxis
                       dataKey="time"
                       axisLine={false}
                       tickLine={false}
-                      tick={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        fill: "hsl(var(--muted-foreground))",
-                      }}
+                      tick={{ fontSize: 12, fontWeight: 600, fill: "rgb(148 163 184)" }}
                       dy={10}
                     />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
-                      tick={{
-                        fontSize: 11,
-                        fontWeight: 600,
-                        fill: "hsl(var(--muted-foreground))",
-                      }}
+                      tick={{ fontSize: 12, fontWeight: 600, fill: "rgb(148 163 184)" }}
                       tickFormatter={(v) => `${v}%`}
                     />
                     <Tooltip
                       content={<CustomTooltip />}
-                      cursor={{
-                        stroke: "hsl(var(--primary))",
-                        strokeWidth: 1,
-                        strokeDasharray: "4 4",
-                      }}
+                      cursor={{ stroke: "rgb(56 189 248)", strokeWidth: 1, strokeDasharray: "4 4" }}
                     />
                     <Area
                       type="monotone"
                       dataKey="value"
-                      stroke="hsl(var(--primary))"
+                      stroke="rgb(56 189 248)"
                       strokeWidth={3}
                       fill="url(#chartGrad)"
                       animationDuration={2000}
@@ -476,10 +470,10 @@ export default function ContractDetailPage({
               
               <div className="rounded-[2.5rem] border border-primary/20 bg-primary/5 p-8 backdrop-blur-xl">
                 <div className="space-y-6">
-                  {/* Summary & Reasoning */}
+                  {/* Executive Summary */}
                   <div className="space-y-3">
                     <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
-                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10">
+                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10 whitespace-pre-wrap">
                       {data.latestScan.reasoning}
                     </p>
                   </div>
@@ -491,7 +485,7 @@ export default function ContractDetailPage({
                          <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                          Root Cause Analysis
                       </h5>
-                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02]">
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02] whitespace-pre-wrap">
                         {data.latestScan.cause || "No root cause identified."}
                       </p>
                     </div>
@@ -500,29 +494,56 @@ export default function ContractDetailPage({
                          <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                          Potential Impact
                       </h5>
-                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02]">
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
                         {data.latestScan.consequences || "Impact assessment pending."}
                       </p>
                     </div>
                   </div>
 
-                  {/* Mitigation Strategy */}
-                  {data.latestScan.mitigationStrategy && (
-                    <div className="space-y-3 pt-2">
-                      <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
-                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                         Technical Mitigation Strategy
+                  {/* Estimated Impact (financial/operational) */}
+                  {data.latestScan.estimatedImpact && (
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
+                        <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        Estimated Impact (Financial & Operational)
                       </h5>
-                      <div className="text-xs font-bold leading-relaxed text-emerald-500/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] shadow-inner font-mono">
-                        {data.latestScan.mitigationStrategy}
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
+                        {data.latestScan.estimatedImpact}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Affected Metrics */}
+                  {data.latestScan.affectedMetrics && data.latestScan.affectedMetrics.length > 0 && (
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Affected / Reviewed Metrics</h5>
+                      <div className="flex flex-wrap gap-2">
+                        {data.latestScan.affectedMetrics.map((m: string, i: number) => (
+                          <Badge key={i} variant="secondary" className="rounded-full text-[10px] font-bold uppercase">
+                            {m}
+                          </Badge>
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Immediate Next Steps */}
+                  {/* Mitigation & Safeguard Strategy */}
+                  <div className="space-y-3 pt-2 border-t border-primary/10">
+                    <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
+                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {["high", "critical"].includes((data.latestScan.riskLevel || "").toLowerCase())
+                        ? "Technical Mitigation Strategy"
+                        : "Recommendations to Safeguard This Contract"}
+                    </h5>
+                    <div className="text-xs font-semibold leading-relaxed text-foreground/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] whitespace-pre-wrap">
+                      {data.latestScan.mitigationStrategy || "No specific strategy in this scan. Re-run Force Scan for updated recommendations, or ensure thresholds and monitoring are configured."}
+                    </div>
+                  </div>
+
+                  {/* Immediate Action Items */}
                   {data.latestScan.nextSteps && data.latestScan.nextSteps.length > 0 && (
                      <div className="space-y-4 pt-4 border-t border-primary/10">
-                       <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Action Items</h5>
+                       <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Immediate Action Items</h5>
                        <div className="space-y-2">
                          {data.latestScan.nextSteps.map((step: string, i: number) => (
                            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
@@ -534,6 +555,25 @@ export default function ContractDetailPage({
                          ))}
                        </div>
                      </div>
+                  )}
+
+                  {/* Long-term Suggested Actions (safeguard tips when low risk) */}
+                  {data.latestScan.suggestedActions && data.latestScan.suggestedActions.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-primary/10">
+                      <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">
+                        {["high", "critical"].includes((data.latestScan.riskLevel || "").toLowerCase())
+                          ? "Long-term Actions"
+                          : "Tips to Safeguard for Future Occurrence"}
+                      </h5>
+                      <ul className="space-y-2">
+                        {data.latestScan.suggestedActions.map((action: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-xs font-semibold text-foreground/85">
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
+                            <span>{action}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
               </div>

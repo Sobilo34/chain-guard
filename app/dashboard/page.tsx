@@ -331,11 +331,14 @@ export default function DashboardPage() {
       );
 
       if (scanResponse.data.quotaExceeded) {
-        setScanMessage("OpenRouter quota exceeded — showing fallback assessment.");
+        setScanMessage(
+          "OpenRouter quota exceeded — showing fallback assessment.",
+        );
       } else if (scanResponse.success && scanResponse.assessmentsCount === 0) {
         setScanMessage("Scan finished but no contract results returned.");
         toast.warning("No assessments returned", {
-          description: "CRE completed but no contract results were received. Check that config matches your monitored contracts and see terminal/API logs.",
+          description:
+            "CRE completed but no contract results were received. Check that config matches your monitored contracts and see terminal/API logs.",
         });
       } else if (scanResponse.success && scanResponse.assessmentsCount > 0) {
         setScanMessage("Scan complete. Updating dashboard...");
@@ -348,7 +351,7 @@ export default function DashboardPage() {
 
       // Re-fetch overview so "Updated X ago" and KPIs reflect latest state
       setScanMessage("Scan complete. Syncing state...");
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
       const response = await getOverview();
       const data = response.data;
       setLiveContracts([...data.contracts]);
@@ -384,15 +387,16 @@ export default function DashboardPage() {
           change: data.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing",
           icon: ShieldCheck,
           color: data.kpis.riskScore >= 70 ? "text-warning" : "text-success",
-          bgColor: data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
+          bgColor:
+            data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
         },
       ]);
-      
+
       setScanMessage("Dashboard updated.");
-      
+
       // Notify other tabs/components that storage changed
-      window.dispatchEvent(new Event('storage'));
-      
+      window.dispatchEvent(new Event("storage"));
+
       setTimeout(() => setScanMessage(null), 5000);
     } catch (err) {
       setScanMessage("Scan failed. Check bridge API and terminal logs.");
@@ -440,28 +444,35 @@ export default function DashboardPage() {
     setIsAdding(true);
     setAddError(null);
     setDetectMessage("Intelligently discovering contract metadata...");
-    
+
     try {
       // 1. Discover contract metadata and suggestions
-    const discoveryResult = await discoverContract(address, addForm.chain);
-    const { discovery, suggestedRequest, preliminaryAssessment } = discoveryResult;
+      const discoveryResult = await discoverContract(address, addForm.chain);
+      const { discovery, suggestedRequest, preliminaryAssessment } =
+        discoveryResult;
 
-    const balanceInfo = discovery.nativeBalance ? `${discovery.nativeBalance.balance} ${discovery.nativeBalance.symbol}` : '0 ETH';
-    setDetectMessage(`Scanned: ${discovery.type} ${discovery.name || 'Contract'}. Found ${balanceInfo} and ${discovery.tokens.length} tokens.`);
+      const balanceInfo = discovery.nativeBalance
+        ? `${discovery.nativeBalance.balance} ${discovery.nativeBalance.symbol}`
+        : "0 ETH";
+      setDetectMessage(
+        `Scanned: ${discovery.type} ${discovery.name || "Contract"}. Found ${balanceInfo} and ${discovery.tokens.length} tokens.`,
+      );
 
-    // 2. Add contract using suggested configuration
-    await addContract({
-      ...suggestedRequest,
-      initialAssessment: preliminaryAssessment,
-      // Ensure we pass the essential fields from our form or defaults
-      alertChannels: ["email"],
-      riskThresholds: suggestedRequest.riskThresholds || getRiskThresholds(addForm.riskProfile),
-    });
+      // 2. Add contract using suggested configuration
+      await addContract({
+        ...suggestedRequest,
+        initialAssessment: preliminaryAssessment,
+        // Ensure we pass the essential fields from our form or defaults
+        alertChannels: ["email"],
+        riskThresholds:
+          suggestedRequest.riskThresholds ||
+          getRiskThresholds(addForm.riskProfile),
+      });
 
       // 3. Refresh overview
       const overviewResponse = await getOverview();
       const data = overviewResponse.data;
-      
+
       // Update state with new data
       setLiveKpis([
         {
@@ -523,7 +534,9 @@ export default function DashboardPage() {
       setIsAddDialogOpen(false);
     } catch (err) {
       console.error("Failed to add contract", err);
-      setAddError("Failed to auto-discover and add contract. Check API availability.");
+      setAddError(
+        "Failed to auto-discover and add contract. Check API availability.",
+      );
     } finally {
       setIsAdding(false);
     }
@@ -547,22 +560,31 @@ export default function DashboardPage() {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
+  // Prefer real metrics from CRE scan (metrics.volatility 0–1 or 0–100, metrics.tvl/totalValueLocked in dollars)
   const volatilitySeries = liveContracts
-    .map((contract) => ({
-      name: contract.name,
-      volatility: parsePercentage(contract.volatility),
-    }))
-    .filter((item) => item.volatility !== null) as Array<{
+    .map((contract) => {
+      const raw = (contract as any).metrics?.volatility;
+      const vol =
+        typeof raw === "number"
+          ? raw <= 1 ? raw * 100 : raw
+          : parsePercentage(contract.volatility);
+      return { name: contract.name, volatility: vol };
+    })
+    .filter((item) => item.volatility != null && Number.isFinite(item.volatility)) as Array<{
     name: string;
     volatility: number;
   }>;
 
   const liquiditySeries = liveContracts
-    .map((contract) => ({
-      name: contract.name,
-      tvl: parseTvl(contract.tvl),
-    }))
-    .filter((item) => item.tvl !== null) as Array<{
+    .map((contract) => {
+      const raw = (contract as any).metrics?.tvl ?? (contract as any).metrics?.totalValueLocked;
+      const tvl =
+        typeof raw === "number" && raw >= 0
+          ? raw
+          : parseTvl(contract.tvl);
+      return { name: contract.name, tvl };
+    })
+    .filter((item) => item.tvl != null && Number.isFinite(item.tvl)) as Array<{
     name: string;
     tvl: number;
   }>;
@@ -610,12 +632,15 @@ export default function DashboardPage() {
           </div>
 
           {scanMessage && (
-            <motion.div 
-               initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
-               className="flex items-center gap-2 rounded-xl bg-primary/5 px-4 py-2 border border-primary/20"
+            <motion.div
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 rounded-xl bg-primary/5 px-4 py-2 border border-primary/20"
             >
               <Activity className="h-3.5 w-3.5 text-primary animate-pulse" />
-              <span className="text-xs font-bold text-primary italic">{scanMessage}</span>
+              <span className="text-xs font-bold text-primary italic">
+                {scanMessage}
+              </span>
             </motion.div>
           )}
 
@@ -650,7 +675,9 @@ export default function DashboardPage() {
                   Add new contract to monitor
                 </DialogTitle>
                 <DialogDescription className="text-muted-foreground">
-                  Provide the contract address and network. Our AI will automatically discover implementation details, held tokens, and mapping feeds.
+                  Provide the contract address and network. Our AI will
+                  automatically discover implementation details, held tokens,
+                  and mapping feeds.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-5 py-4">
@@ -689,7 +716,7 @@ export default function DashboardPage() {
                         }
                         className="h-12 w-full appearance-none rounded-xl border border-border/40 bg-muted/30 px-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20"
                       >
-                      <optgroup label="Mainnets">
+                        <optgroup label="Mainnets">
                           <option value="ethereumMainnet">
                             Ethereum Mainnet
                           </option>
@@ -816,11 +843,13 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    System will automatically fetch protocol name, contract type (Proxy/Diamond), and map tokens to Chainlink feeds.
+                    System will automatically fetch protocol name, contract type
+                    (Proxy/Diamond), and map tokens to Chainlink feeds.
                   </p>
                   {detectMessage && (
-                    <motion.p 
-                      initial={{ opacity: 0, x: -5 }} animate={{ opacity: 1, x: 0 }}
+                    <motion.p
+                      initial={{ opacity: 0, x: -5 }}
+                      animate={{ opacity: 1, x: 0 }}
                       className="text-[11px] font-semibold text-primary/80 italic"
                     >
                       {detectMessage}
@@ -936,7 +965,10 @@ export default function DashboardPage() {
             <CardContent className="px-8 pb-8">
               <div className="flex flex-col gap-3">
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-bold text-foreground">{liveContracts.length}</span> contract{liveContracts.length !== 1 ? "s" : ""} monitored
+                  <span className="font-bold text-foreground">
+                    {liveContracts.length}
+                  </span>{" "}
+                  contract{liveContracts.length !== 1 ? "s" : ""} monitored
                 </p>
                 {liveContracts.length > 0 ? (
                   <ul className="space-y-2">
@@ -948,7 +980,9 @@ export default function DashboardPage() {
                         >
                           <div className="flex items-center gap-3 min-w-0">
                             <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
-                            <span className="text-sm font-semibold truncate">{contract.name}</span>
+                            <span className="text-sm font-semibold truncate">
+                              {contract.name}
+                            </span>
                             {getRiskBadge(contract.riskLevel || "low")}
                           </div>
                           <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
@@ -957,9 +991,14 @@ export default function DashboardPage() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-muted-foreground py-4">No contracts yet. Add one from the Registry.</p>
+                  <p className="text-sm text-muted-foreground py-4">
+                    No contracts yet. Add one from the Registry.
+                  </p>
                 )}
-                <Link href="/dashboard/contracts" className="text-xs font-bold text-primary hover:underline mt-1">
+                <Link
+                  href="/dashboard/contracts"
+                  className="text-xs font-bold text-primary hover:underline mt-1"
+                >
                   Manage all contracts in Registry →
                 </Link>
               </div>

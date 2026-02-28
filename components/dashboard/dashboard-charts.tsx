@@ -16,6 +16,11 @@ import {
 type VolatilityPoint = { name: string; volatility: number };
 type LiquidityPoint = { name: string; tvl: number };
 
+// High-contrast colors for chart elements so they remain visible in dark mode
+const CHART_AXIS_AND_GRID = "rgb(148 163 184)"; // slate-400, visible on dark bg
+const CHART_VOLATILITY_STROKE = "rgb(56 189 248)"; // sky-400
+const CHART_LIQUIDITY_FILL = "rgb(34 197 94)";   // green-500
+
 const CustomTooltip = ({
   active,
   payload,
@@ -88,48 +93,30 @@ export function DashboardCharts({
                       x2="0"
                       y2="1"
                     >
-                      <stop
-                        offset="0%"
-                        stopColor="hsl(var(--chart-1))"
-                        stopOpacity={0.3}
-                      />
-                      <stop
-                        offset="100%"
-                        stopColor="hsl(var(--chart-1))"
-                        stopOpacity={0}
-                      />
+                      <stop offset="0%" stopColor={CHART_VOLATILITY_STROKE} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={CHART_VOLATILITY_STROKE} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                    vertical={false}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_AXIS_AND_GRID} strokeOpacity={0.6} vertical={false} />
                   <XAxis
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    tick={{
-                      fill: "hsl(var(--muted-foreground))",
-                      fontSize: 11,
-                    }}
+                    tick={{ fill: CHART_AXIS_AND_GRID, fontSize: 12, fontWeight: 600 }}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{
-                      fill: "hsl(var(--muted-foreground))",
-                      fontSize: 11,
-                    }}
+                    tick={{ fill: CHART_AXIS_AND_GRID, fontSize: 12, fontWeight: 600 }}
                     tickFormatter={(value) => `${value}%`}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Area
                     type="monotone"
                     dataKey="volatility"
-                    stroke="hsl(var(--chart-1))"
+                    stroke={CHART_VOLATILITY_STROKE}
                     fill="url(#volatilityGradient)"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
                     name="Volatility"
                   />
                 </AreaChart>
@@ -161,33 +148,23 @@ export function DashboardCharts({
                   data={liquiditySeries}
                   margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                 >
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    stroke="hsl(var(--border))"
-                    vertical={false}
-                  />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_AXIS_AND_GRID} strokeOpacity={0.6} vertical={false} />
                   <XAxis
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    tick={{
-                      fill: "hsl(var(--muted-foreground))",
-                      fontSize: 11,
-                    }}
+                    tick={{ fill: CHART_AXIS_AND_GRID, fontSize: 12, fontWeight: 600 }}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{
-                      fill: "hsl(var(--muted-foreground))",
-                      fontSize: 11,
-                    }}
+                    tick={{ fill: CHART_AXIS_AND_GRID, fontSize: 12, fontWeight: 600 }}
                     tickFormatter={(value) => `$${Number(value) / 1_000_000}M`}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar
                     dataKey="tvl"
-                    fill="hsl(var(--chart-2))"
+                    fill={CHART_LIQUIDITY_FILL}
                     radius={[4, 4, 0, 0]}
                     name="TVL"
                   />
