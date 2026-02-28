@@ -3,7 +3,6 @@ import { createPublicClient, http, parseAbi, Address, formatUnits } from "viem";
 import { sepolia, mainnet, arbitrum, optimism, base, polygon } from "viem/chains";
 
 // Configuration
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
 
 const NETWORKS: Record<string, any> = {
@@ -102,8 +101,8 @@ export async function POST(req: NextRequest) {
             } catch (e) { }
         }
 
-        // 5. AI Insights if API key available
-        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
+        // 5. AI Insights if OpenRouter API key available
+        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
         let name = "Discovered Contract";
         let suggestions = [];
 

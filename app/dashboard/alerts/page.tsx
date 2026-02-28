@@ -610,13 +610,13 @@ export default function AlertsPage() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-8 py-10 space-y-10">
-                {/* Gemini Engine Analysis */}
+                {/* AI Engine Analysis */}
                 <section className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5 p-8 space-y-8">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-primary">
                       <Zap className="h-5 w-5 fill-primary" />
                       <span className="text-sm font-black uppercase tracking-[0.2em]">
-                        Gemini Pro Intelligence
+                        AI Risk Intelligence
                       </span>
                     </div>
                     <Badge

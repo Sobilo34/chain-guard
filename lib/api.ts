@@ -2,6 +2,34 @@ import { ContractStorage } from "./storage";
 
 export const API_BASE_URL = "/api/cre";
 
+/** AI analysis / latest scan result stored per contract */
+export type ContractScanResult = {
+  reasoning?: string;
+  cause?: string;
+  consequences?: string;
+  mitigationStrategy?: string;
+  nextSteps?: string[];
+  suggestedActions?: string[];
+  riskType?: string;
+  riskLevel?: string;
+};
+
+/** Parsed SENTINEL_ASSESSMENT from CRE simulation stdout */
+export type SentinelAssessment = {
+  contractAddress: string;
+  riskLevel: string;
+  riskScore: number;
+  metrics?: {
+    volatility?: number;
+    tvl?: number;
+    liquidity?: number;
+    currentPrice?: number;
+    priceChange24h?: number;
+    [key: string]: any;
+  };
+  latestScan?: ContractScanResult;
+};
+
 export type DashboardContract = {
   id: string;
   name: string;
@@ -13,7 +41,8 @@ export type DashboardContract = {
   chainSelectorName?: string;
   status?: string;
   lastUpdate?: string;
-  latestScan?: any;
+  latestScan?: ContractScanResult;
+  riskScore?: number;
   metrics?: {
     tvl?: number;
     price?: number;
@@ -104,7 +133,8 @@ export async function getContracts(): Promise<{ contracts: DashboardContract[] }
 
 export async function getContractDetail(address: string): Promise<any> {
   const contracts = ContractStorage.getContracts();
-  const contract = contracts.find((c) => c.address.toLowerCase() === address.toLowerCase());
+  const norm = (a: string) => (a || "").toLowerCase().trim();
+  const contract = contracts.find((c) => norm(c.address) === norm(address));
   if (contract) {
     const riskScore = (contract as any).riskScore ||
       (contract.status === "CRITICAL" ? 92 :
@@ -158,32 +188,42 @@ export async function runGeminiScan(payload?: {
     }
   );
 
-  if (response.success && response.assessments.length > 0) {
-    // Update local storage with new assessments
-    response.assessments.forEach((assessment) => {
-      ContractStorage.updateContract(assessment.contractAddress, {
+  const assessments = response.assessments ?? [];
+  const normalizeAddr = (addr: string) => {
+    if (!addr) return "";
+    const a = addr.toLowerCase().trim();
+    return a.startsWith("0x") ? a : `0x${a}`;
+  };
+
+  if (response.success && assessments.length > 0) {
+    assessments.forEach((assessment: SentinelAssessment) => {
+      const address = normalizeAddr(assessment.contractAddress);
+      const updated = ContractStorage.updateContract(address, {
         riskLevel: assessment.riskLevel.toLowerCase() as any,
         status: assessment.riskLevel,
-        latestScan: {
-          ...(assessment.latestScan || assessment),
-          rawOutput: response.rawOutput // Store full logs context within each asset's scan data
-        },
+        riskScore: assessment.riskScore,
+        latestScan: assessment.latestScan || (assessment as unknown as ContractScanResult),
         metrics: assessment.metrics,
       });
+      if (!updated) {
+        console.warn("[runGeminiScan] No contract found for address:", address, "— ensure CRE config matches dashboard contracts.");
+      }
 
-      // If risk is high, add an alert
       if (assessment.riskLevel === "HIGH" || assessment.riskLevel === "CRITICAL") {
         ContractStorage.addAlert({
           timestamp: new Date().toISOString(),
-          contract: assessment.contractAddress,
-          contractName: contracts.find(c => c.address.toLowerCase() === assessment.contractAddress.toLowerCase())?.name || "Unknown",
+          contract: address,
+          contractName: contracts.find(c => normalizeAddr(c.address) === address)?.name || "Unknown",
           type: "High Risk Detected",
-          description: assessment.reasoning || "Gemini detected high risk during scan.",
+          description: assessment.latestScan?.reasoning || "AI detected high risk during scan.",
           severity: assessment.riskLevel.toLowerCase() as any,
           status: "active"
         });
       }
     });
+  }
+
+  if (response.success) {
     ContractStorage.updateSyncTimestamp();
   }
 
@@ -191,7 +231,8 @@ export async function runGeminiScan(payload?: {
     data: {
       quotaExceeded: response.error?.includes("429")
     } as ScanResult,
-    rawOutput: response.rawOutput
+    success: response.success,
+    assessmentsCount: assessments.length,
   };
 }
 

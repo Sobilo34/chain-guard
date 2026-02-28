@@ -203,8 +203,6 @@ export default function ContractDetailPage({
       }))
     : (data.aiSuggestions || []);
 
-  const rawLogs = aiScan.rawOutput || null;
-
   const riskBreakdown = [
     {
       name: "Volatility",
@@ -468,12 +466,12 @@ export default function ContractDetailPage({
             </CardContent>
           </Card>
 
-          {/* Detailed Gemini AI Analysis */}
+          {/* Detailed AI Risk Analysis */}
           {data.latestScan && (
             <div className="space-y-6">
               <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
                 <Zap className="h-5 w-5 text-primary fill-primary" />
-                Gemini Pro Intelligence
+                AI Risk Intelligence
               </h3>
               
               <div className="rounded-[2.5rem] border border-primary/20 bg-primary/5 p-8 backdrop-blur-xl">
@@ -537,30 +535,6 @@ export default function ContractDetailPage({
                        </div>
                      </div>
                   )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Simulation Raw Logs - Integrated beneath AI Analysis */}
-          {rawLogs && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
-                <Activity className="h-5 w-5 text-primary" />
-                Simulation Execution Logs
-              </h3>
-              <div className="overflow-hidden rounded-[2.5rem] border border-border/40 bg-slate-950 p-1 shadow-2xl">
-                <div className="flex items-center justify-between border-b border-white/5 bg-white/[0.02] px-6 py-3">
-                  <div className="flex items-center gap-2">
-                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">CRE Output Terminal</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-slate-500">{data.lastUpdate || "LIVE_STREAM"}</span>
-                </div>
-                <div className="max-h-[400px] overflow-auto p-6 font-mono text-[11px] leading-relaxed text-slate-300 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                  <pre className="whitespace-pre-wrap selection:bg-primary/30 selection:text-white">
-                    {rawLogs}
-                  </pre>
                 </div>
               </div>
             </div>

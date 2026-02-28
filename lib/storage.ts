@@ -4,6 +4,7 @@
  */
 
 import { DashboardContract, DashboardAlert, OverviewPayload } from "./api";
+import { getDefaultContractsDashboard } from "./default-contracts";
 
 const STORAGE_KEYS = {
     CONTRACTS: "chainguard_contracts",
@@ -25,57 +26,8 @@ export class ContractStorage {
             return clean.startsWith("0x") ? clean : `0x${clean}`;
         };
 
-        const seedContracts: DashboardContract[] = [
-            {
-                id: "0x514910771af9ca656af840dff83e8264ecf986ca",
-                name: "Chainlink",
-                address: "0x514910771af9ca656af840dff83e8264ecf986ca",
-                tvl: "$125.0M",
-                riskLevel: "low",
-                volatility: "2.4%",
-                chain: "ethereumMainnet",
-                chainSelectorName: "ethereum-mainnet",
-                status: "LOW",
-                lastUpdate: new Date().toISOString(),
-                priceFeeds: [
-                    {
-                        pairName: "LINK/USD",
-                        feedAddress: "0x2c1d072e50aD1FdecF8aC38D21Bf21bcfb1F3627",
-                        decimals: 8
-                    }
-                ],
-                riskThresholds: {
-                    depegTolerance: 0.02,
-                    volatilityMax: 0.15,
-                    liquidityDropMax: 0.25,
-                    collateralRatioMin: 1.5
-                }
-            },
-            {
-                id: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-                name: "RISK_MOCK: USDT Depeg Scenario",
-                address: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-                tvl: "$45.2M",
-                riskLevel: "high",
-                volatility: "85.0%",
-                chain: "ethereumMainnet",
-                chainSelectorName: "ethereum-mainnet",
-                status: "CRITICAL",
-                lastUpdate: new Date().toISOString(),
-                priceFeeds: [
-                    {
-                        pairName: "USDT/USD",
-                        feedAddress: "0x3E7d1eA13978982C58110906476e3FFf87208e59",
-                        decimals: 8
-                    }
-                ],
-                riskThresholds: {
-                    depegTolerance: 0.01,
-                    volatilityMax: 0.1,
-                    liquidityDropMax: 0.2
-                }
-            }
-        ];
+        // Same defaults as CRE config (lib/default-contracts.ts)
+        const seedContracts: DashboardContract[] = getDefaultContractsDashboard() as DashboardContract[];
 
         let contracts: DashboardContract[] = [];
         if (stored) {
@@ -298,7 +250,7 @@ export class ContractStorage {
             alerts: alerts.slice(0, 5), // Latest 5 for overview
             system: {
                 oracle: "Chainlink Price Feeds",
-                riskEngine: "Gemini 2.0 Flash",
+                riskEngine: "OpenRouter AI",
                 alertService: "Active (Local)",
                 lastSync: localStorage.getItem(STORAGE_KEYS.SYSTEM_SYNC) || new Date().toISOString(),
             },

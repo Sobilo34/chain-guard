@@ -24,20 +24,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   ShieldCheck,
   FileCode2,
   AlertTriangle,
   TrendingUp,
   Activity,
-  Search,
   Plus,
   ArrowUpRight,
   Clock,
@@ -55,6 +46,7 @@ import {
   type DashboardContract,
 } from "@/lib/api";
 import { createPublicClient, http, parseAbi } from "viem";
+import { toast } from "@/components/ui/toast";
 
 const getRiskBadge = (level: string) => {
   const normalizedLevel = level.toLowerCase();
@@ -229,7 +221,6 @@ const formatLastSync = (value: string) => {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState("");
   const [liveKpis, setLiveKpis] = useState<any[]>([]);
   const [liveContracts, setLiveContracts] = useState<DashboardContract[]>([]);
   const [liveAlerts, setLiveAlerts] = useState<DashboardAlert[]>([]);
@@ -246,8 +237,6 @@ export default function DashboardPage() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [detectMessage, setDetectMessage] = useState<string | null>(null);
-  const [rawLogs, setRawLogs] = useState<string | null>(null);
-  const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [addForm, setAddForm] = useState({
     address: "",
     chain: "sepolia",
@@ -325,18 +314,9 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const filteredContracts = liveContracts.filter((contract) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      contract.name.toLowerCase().includes(query) ||
-      contract.address.toLowerCase().includes(query)
-    );
-  });
-
   const handleQuickScan = async () => {
     setIsScanning(true);
     setScanMessage("Initializing CRE Simulator...");
-    setRawLogs(null);
     try {
       const first = liveContracts[0];
       const scanResponse = await runGeminiScan(
@@ -348,29 +328,29 @@ export default function DashboardPage() {
             }
           : undefined,
       );
-      
-      if (scanResponse.rawOutput) {
-        setRawLogs(scanResponse.rawOutput);
-      }
 
       if (scanResponse.data.quotaExceeded) {
-        setScanMessage("Gemini quota exceeded — showing fallback assessment.");
+        setScanMessage("OpenRouter quota exceeded — showing fallback assessment.");
+      } else if (scanResponse.success && scanResponse.assessmentsCount === 0) {
+        setScanMessage("Scan finished but no contract results returned.");
+        toast.warning("No assessments returned", {
+          description: "CRE completed but no contract results were received. Check that config matches your monitored contracts and see terminal/API logs.",
+        });
+      } else if (scanResponse.success && scanResponse.assessmentsCount > 0) {
+        setScanMessage("Scan complete. Updating dashboard...");
+        toast.success("Scan complete", {
+          description: `${scanResponse.assessmentsCount} contract(s) updated with latest risk data.`,
+        });
       } else {
         setScanMessage("Scan complete. Updating dashboard...");
       }
 
-      // Re-fetch overview to show new alerts/scores
+      // Re-fetch overview so "Updated X ago" and KPIs reflect latest state
       setScanMessage("Scan complete. Syncing state...");
-      
-      // Force a slight delay to ensure localStorage write is finished on all threads
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
+      await new Promise(resolve => setTimeout(resolve, 300));
       const response = await getOverview();
       const data = response.data;
-      
-      console.log("Dashboard re-fetched data:", data.contracts);
-      
-      setLiveContracts([...data.contracts]); // Create a new array to trigger React reactivity
+      setLiveContracts([...data.contracts]);
       setLiveAlerts([...data.alerts]);
       setLiveKpis([
         {
@@ -604,7 +584,7 @@ export default function DashboardPage() {
           </h1>
           <p className="max-w-2xl text-muted-foreground">
             End-to-end security monitoring for your on-chain assets powered by
-            Chainlink & Gemini LLM.
+            Chainlink & OpenRouter AI.
           </p>
         </motion.div>
 
@@ -636,34 +616,6 @@ export default function DashboardPage() {
               <Activity className="h-3.5 w-3.5 text-primary animate-pulse" />
               <span className="text-xs font-bold text-primary italic">{scanMessage}</span>
             </motion.div>
-          )}
-
-          {rawLogs && (
-            <Dialog open={isLogsOpen} onOpenChange={setIsLogsOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-10 rounded-xl border-border/40 hover:bg-primary/5">
-                  <FileCode2 className="mr-2 h-4 w-4 text-primary" />
-                  Simulation Logs
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col rounded-3xl border-border/40 bg-card/90 backdrop-blur-2xl">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-primary" />
-                    CRE Simulation Output
-                  </DialogTitle>
-                  <DialogDescription>
-                    Real-time execution logs from the Chainlink Sentinel environment.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="flex-1 overflow-auto mt-4 rounded-xl bg-slate-950 p-6 font-mono text-[11px] leading-relaxed text-slate-300 border border-border/20">
-                  <pre className="whitespace-pre-wrap">{rawLogs}</pre>
-                </div>
-                <DialogFooter>
-                  <Button className="rounded-xl font-bold" onClick={() => setIsLogsOpen(false)}>Close Logs</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           )}
 
           <Button
@@ -952,7 +904,7 @@ export default function DashboardPage() {
       />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* Monitored Assets Table */}
+        {/* Monitored Assets summary – full list lives on /dashboard/contracts */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -969,112 +921,47 @@ export default function DashboardPage() {
                   Real-time status of tracked smart contracts.
                 </p>
               </div>
-              <div className="relative w-full max-w-xs group">
-                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
-                <Input
-                  placeholder="Filter contracts..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-10 rounded-2xl border-border/40 bg-muted/30 pl-10 text-[13px] focus-visible:ring-primary/20"
-                />
-              </div>
+              <Link href="/dashboard/contracts">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 rounded-2xl border-border/40 font-bold gap-2"
+                >
+                  View Registry
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </Link>
             </CardHeader>
-            <CardContent className="px-1 overflow-x-auto">
-              <Table className="relative">
-                <TableHeader>
-                  <TableRow className="border-border/40 hover:bg-transparent">
-                    <TableHead className="px-7 font-bold text-foreground/70 uppercase text-[10px]">
-                      Contract Name
-                    </TableHead>
-                    <TableHead className="font-bold text-foreground/70 uppercase text-[10px]">
-                      Network
-                    </TableHead>
-                    <TableHead className="font-bold text-foreground/70 uppercase text-[10px]">
-                      Risk Analysis
-                    </TableHead>
-                    <TableHead className="hidden lg:table-cell font-bold text-foreground/70 uppercase text-[10px]">
-                      AI Assessment
-                    </TableHead>
-                    <TableHead className="text-right font-bold text-foreground/70 uppercase text-[10px]">
-                      TVL (USD)
-                    </TableHead>
-                    <TableHead className="w-[100px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredContracts.map((contract) => (
-                    <TableRow
-                      key={contract.address}
-                      onClick={() => router.push(`/dashboard/contracts/${contract.id || contract.address}`)}
-                      className="group border-border/20 transition-all hover:bg-primary/[0.03] cursor-pointer"
-                    >
-                      <TableCell className="px-7 py-5">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-muted/40 transition-transform group-hover:scale-110">
-                            <FileCode2 className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                          </div>
-                          <div>
-                            <div className="text-sm font-bold text-foreground">
-                              {contract.name}
-                            </div>
-                            <div className="font-mono text-[10px] text-muted-foreground tracking-tight opacity-70">
-                              {contract.address}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getChainBadge(
-                          contract.chainSelectorName || "ethereum",
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {getRiskBadge(contract.riskLevel || "low")}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell max-w-[200px]">
-                        <div className="flex items-center gap-2">
-                          <Zap className={cn("h-3.5 w-3.5 shrink-0", (contract as any)?.latestScan?.reasoning ? "text-primary animate-pulse" : "text-muted-foreground")} />
-                          <span className={cn("text-xs truncate font-medium", (contract as any)?.latestScan?.reasoning ? "text-foreground" : "text-muted-foreground")} title={(contract as any)?.latestScan?.reasoning || "No recent scan data"}>
-                            {(contract as any)?.latestScan?.reasoning || "Awaiting Gemini analysis..."}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="text-sm font-black tabular-nums">
-                          {contract.tvl || "$0.00"}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground font-bold">
-                          Updated {formatLastSync(contract.lastUpdate || "")}
-                        </div>
-                      </TableCell>
-                      <TableCell className="pr-7 text-right">
+            <CardContent className="px-8 pb-8">
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-bold text-foreground">{liveContracts.length}</span> contract{liveContracts.length !== 1 ? "s" : ""} monitored
+                </p>
+                {liveContracts.length > 0 ? (
+                  <ul className="space-y-2">
+                    {liveContracts.slice(0, 4).map((contract) => (
+                      <li key={contract.address}>
                         <Link
                           href={`/dashboard/contracts/${contract.id || contract.address}`}
-                          passHref
+                          className="flex items-center justify-between rounded-xl border border-border/30 bg-muted/20 px-4 py-3 transition-colors hover:bg-primary/5 hover:border-primary/30 group"
                         >
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 rounded-lg transition-all group-hover:bg-primary/20 group-hover:text-primary"
-                          >
-                            <ArrowUpRight className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+                            <span className="text-sm font-semibold truncate">{contract.name}</span>
+                            {getRiskBadge(contract.riskLevel || "low")}
+                          </div>
+                          <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
                         </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {filteredContracts.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="h-40 text-center text-muted-foreground"
-                      >
-                        No contracts found matching your search.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-4">No contracts yet. Add one from the Registry.</p>
+                )}
+                <Link href="/dashboard/contracts" className="text-xs font-bold text-primary hover:underline mt-1">
+                  Manage all contracts in Registry →
+                </Link>
+              </div>
             </CardContent>
           </Card>
         </motion.div>

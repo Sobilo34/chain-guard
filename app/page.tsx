@@ -140,7 +140,7 @@ export default function LoginPage() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary"></span>
           </span>
           <span className="text-xs font-medium tracking-wider uppercase text-white/70">
-            Powered by Chainlink CRE & Gemini AI
+            Powered by Chainlink CRE & OpenRouter AI
           </span>
         </motion.div>
 
@@ -263,7 +263,7 @@ export default function LoginPage() {
             {
               icon: Zap,
               title: "AI Analysis",
-              desc: "Gemini-powered sentiment and transaction pattern analysis.",
+              desc: "AI-powered sentiment and transaction pattern analysis.",
             },
             {
               icon: Lock,
