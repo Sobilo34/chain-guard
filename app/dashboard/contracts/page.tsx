@@ -60,6 +60,7 @@ const getRiskBadge = (level: string) => {
       );
     case "high":
     case "crit":
+    case "critical":
       return (
         <Badge className="bg-rose-500/10 text-rose-500 border-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase">
           High Risk
