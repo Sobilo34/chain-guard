@@ -38,7 +38,7 @@ import {
   ShieldCheck,
   Globe,
 } from "lucide-react";
-import { getContracts, runGeminiScan, addContract, discoverContract, runInitialScanForContract, type DashboardContract } from "@/lib/api";
+import { getContracts, runGeminiScan, addContract, type DashboardContract } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 
 const getRiskBadge = (level: string) => {
@@ -151,6 +151,7 @@ export default function ContractsPage() {
     customChainId: "",
     priceFeeds: [] as { asset: string; feedAddress: string }[],
   });
+  const [isAddingContract, setIsAddingContract] = useState(false);
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;
@@ -224,86 +225,53 @@ export default function ContractsPage() {
   };
 
   const handleAddContract = async () => {
-    if (!newContract.address.trim()) return;
-
+    const address = newContract.address.trim();
+    if (!address) return;
+    const isAddressValid = /^0x[a-fA-F0-9]{40}$/.test(address);
+    if (!isAddressValid) {
+      toast.error("Invalid address", { description: "Please enter a valid 0x contract address." });
+      return;
+    }
     if (newContract.chain === "customMainnet") {
-      if (
-        !newContract.customChainName ||
-        !newContract.customChainSelectorName ||
-        !newContract.customRpcUrl
-      ) {
-        alert("Provide custom chain name, selector, and RPC URL.");
+      if (!newContract.customChainName || !newContract.customChainSelectorName || !newContract.customRpcUrl) {
+        toast.error("Custom chain required", { description: "Provide custom chain name, selector, and RPC URL." });
         return;
       }
     }
-
-    const chainConfig = getChainConfig();
-    const network = newContract.chain;
-
+    setIsAddingContract(true);
     try {
-      const discoveryResult = await discoverContract(newContract.address.trim(), network);
-      const { discovery, suggestedRequest, preliminaryAssessment } = discoveryResult;
-      const discoveredTokens = Array.isArray(discovery?.tokens)
-        ? discovery.tokens.map((t: { address?: string; symbol?: string; decimals?: number }) => ({
-            address: (t.address || "").trim(),
-            symbol: (t.symbol || "?").trim(),
-            decimals: t.decimals,
-          })).filter((t: { address: string }) => t.address.length > 0)
-        : undefined;
-
+      const chainConfig = getChainConfig();
+      const with0x = address.startsWith("0x") ? address : `0x${address}`;
       await addContract({
-        ...suggestedRequest,
-        chain: suggestedRequest.chainSelectorName ?? chainConfig.chainSelectorName,
-        chainSelectorName: suggestedRequest.chainSelectorName ?? chainConfig.chainSelectorName,
-        chainName: suggestedRequest.chainName ?? chainConfig.chainName,
-        rpcUrl: chainConfig.rpcUrl,
-        chainId: newContract.customChainId ? Number(newContract.customChainId) : undefined,
-        name: suggestedRequest.name || newContract.name || "Discovered Contract",
-        protocol: suggestedRequest.protocol || newContract.protocol || "Normal",
-        priceFeeds: suggestedRequest.priceFeeds ?? [],
-        riskThresholds: suggestedRequest.riskThresholds,
+        address: with0x.toLowerCase(),
+        name: newContract.name?.trim() || "New Contract",
+        chain: chainConfig.chainSelectorName,
+        chainSelectorName: chainConfig.chainSelectorName,
+        priceFeeds: [],
+        riskThresholds: {},
         alertChannels: ["email"],
-        initialAssessment: preliminaryAssessment,
-        ...(discoveredTokens?.length ? { discoveredTokens } : {}),
       });
-
-      const refreshed = await getContracts();
-      if (refreshed.contracts) {
-        setContracts(refreshed.contracts);
-      }
-      toast.success("Contract added", { description: `${suggestedRequest.name || "Contract"} is now monitored.` });
-
-      runInitialScanForContract({
-        address: suggestedRequest.address,
-        name: suggestedRequest.name,
-        chainSelectorName: suggestedRequest.chainSelectorName,
-        riskThresholds: suggestedRequest.riskThresholds,
-        priceFeeds: suggestedRequest.priceFeeds,
-      }).then((assessment) => {
-        if (assessment) {
-          getContracts().then((r) => { if (r.contracts) setContracts(r.contracts); });
-          toast.success("Initial scan complete", { description: `Risk: ${assessment.riskLevel || "LOW"}` });
-        }
-      }).catch(() => {});
-    } catch (err: any) {
-      console.error("Add contract failed", err);
-      const message = typeof err?.message === "string" ? err.message : String(err ?? "Discovery or add failed");
-      toast.error("Could not add contract", { description: message });
-      return;
+      const r = await getContracts();
+      if (r.contracts) setContracts(r.contracts);
+      setNewContract({
+        address: "",
+        chain: "ethereumMainnet",
+        name: "",
+        protocol: "Normal",
+        customChainName: "",
+        customChainSelectorName: "",
+        customRpcUrl: "",
+        customChainId: "",
+        priceFeeds: [],
+      });
+      setIsAddDialogOpen(false);
+      toast.success("Contract added", { description: "Run Full Analysis on its page to start monitoring." });
+    } catch (err) {
+      console.error("Failed to add contract", err);
+      toast.error("Could not add contract");
+    } finally {
+      setIsAddingContract(false);
     }
-
-    setNewContract({
-      address: "",
-      chain: "ethereumMainnet",
-      name: "",
-      protocol: "Normal",
-      customChainName: "",
-      customChainSelectorName: "",
-      customRpcUrl: "",
-      customChainId: "",
-      priceFeeds: [],
-    });
-    setIsAddDialogOpen(false);
   };
 
   const handleGlobalScan = async () => {
@@ -680,9 +648,10 @@ export default function ContractsPage() {
               </Button>
               <Button
                 className="rounded-xl px-8 font-bold bg-primary hover:bg-primary/90"
+                disabled={isAddingContract}
                 onClick={handleAddContract}
               >
-                Begin Indexing
+                {isAddingContract ? "Adding…" : "Begin Indexing"}
               </Button>
             </DialogFooter>
           </DialogContent>

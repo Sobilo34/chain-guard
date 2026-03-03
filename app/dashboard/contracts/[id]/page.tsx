@@ -897,7 +897,33 @@ export default function ContractDetailPage({
             const mitigationStrategy = scan?.mitigationStrategy ?? (fa?.recommendations?.length ? fa.recommendations.join("\n\n") : undefined);
             const nextSteps = fa?.nextSteps ?? scan?.nextSteps;
             const suggestedActions = fa?.suggestedActions ?? scan?.suggestedActions;
-            if (!data.fullAnalysis && !data.latestScan) return null;
+            if (!data.fullAnalysis && !data.latestScan) {
+              return (
+                <div className="space-y-6">
+                  <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
+                    <Zap className="h-5 w-5 text-primary fill-primary" />
+                    AI Risk Intelligence
+                  </h3>
+                  <div className="rounded-[2.5rem] border border-primary/20 bg-primary/5 p-8 backdrop-blur-xl">
+                    <div className="flex flex-col items-center justify-center gap-4 py-8 text-center">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary">
+                        <Sparkles className="h-7 w-7" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground max-w-md">
+                        No analysis yet. Run <strong>Full Analysis</strong> to start monitoring this contract.
+                      </p>
+                      <Button
+                        onClick={() => setAnalysisModalOpen(true)}
+                        disabled={analyzeLoading}
+                        className="rounded-xl font-bold"
+                      >
+                        {analyzeLoading ? "Analyzing…" : "Full Analysis"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
             return (
             <div className="space-y-6">
               <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">

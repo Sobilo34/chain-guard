@@ -233,6 +233,7 @@ export type AnalyzeResult = {
     suggestedActions?: string[];
   };
   aiChosenConfig?: { priceFeedPairs?: string[]; riskThresholds?: any; resolvedPriceFeeds?: any[] };
+  discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }>;
 };
 
 const ANALYZE_TIMEOUT_MS = 120_000; // 2 min for discover + pre-CRE + CRE + post-CRE

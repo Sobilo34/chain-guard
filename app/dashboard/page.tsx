@@ -9,6 +9,9 @@ const motion =
   (framerMotion as any).motion ||
   (framerMotion as any).default?.motion ||
   (framerMotion as any).default;
+const AnimatePresence =
+  (framerMotion as any).AnimatePresence ||
+  (framerMotion as any).default?.AnimatePresence;
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,13 +38,12 @@ import {
   ChevronRight,
   Zap,
   RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import {
   getOverview,
   addContract,
-  discoverContract,
-  runInitialScanForContract,
   runGeminiScan,
   type DashboardAlert,
   type DashboardContract,
@@ -213,7 +215,16 @@ const formatLastSync = (value: string) => {
 
 // (erc20Abi removed as manual detection is handled by backend discovery)
 
-// (SUPPORTED_CHAINS and getChainConfig removed as configuration is handled by discovery API)
+function getChainConfig(chain: string) {
+  const preset: Record<string, { chainName: string; chainSelectorName: string }> = {
+    ethereumMainnet: { chainName: "Ethereum Mainnet", chainSelectorName: "ethereum-mainnet" },
+    arbitrumMainnet: { chainName: "Arbitrum Mainnet", chainSelectorName: "ethereum-mainnet-arbitrum-1" },
+    optimismMainnet: { chainName: "Optimism Mainnet", chainSelectorName: "ethereum-mainnet-optimism-1" },
+    baseMainnet: { chainName: "Base Mainnet", chainSelectorName: "base-mainnet" },
+    polygonMainnet: { chainName: "Polygon Mainnet", chainSelectorName: "polygon-mainnet" },
+  };
+  return preset[chain] || preset.ethereumMainnet;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -438,125 +449,40 @@ export default function DashboardPage() {
       setAddError("Please enter a valid 0x contract address.");
       return;
     }
-
-    setIsAdding(true);
     setAddError(null);
-    setDetectMessage("Intelligently discovering contract metadata...");
-
+    setIsAdding(true);
     try {
-      // 1. Discover contract metadata and suggestions
-      const discoveryResult = await discoverContract(address, addForm.chain);
-      const { discovery, suggestedRequest, preliminaryAssessment } =
-        discoveryResult;
-
-      const balanceInfo = discovery.nativeBalance
-        ? `${discovery.nativeBalance.balance} ${discovery.nativeBalance.symbol}`
-        : "0 ETH";
-      setDetectMessage(
-        `Scanned: ${discovery.type} ${discovery.name || "Contract"}. Found ${balanceInfo} and ${discovery.tokens.length} tokens.`,
-      );
-
-      // 2. Add contract using suggested configuration (with discovered tokens for portfolio TVL)
-      const discoveredTokens = Array.isArray(discovery.tokens)
-        ? discovery.tokens.map((t: { address?: string; symbol?: string; decimals?: number }) => ({
-            address: (t.address || "").trim(),
-            symbol: (t.symbol || "?").trim(),
-            decimals: t.decimals,
-          })).filter((t: { address: string }) => t.address.length > 0)
-        : undefined;
+      const chainConfig = getChainConfig(addForm.chain);
+      const with0x = address.startsWith("0x") ? address : `0x${address}`;
       await addContract({
-        ...suggestedRequest,
-        initialAssessment: preliminaryAssessment,
+        address: with0x.toLowerCase(),
+        name: addForm.name?.trim() || "New Contract",
+        chain: chainConfig.chainSelectorName,
+        chainSelectorName: chainConfig.chainSelectorName,
+        priceFeeds: [],
+        riskThresholds: getRiskThresholds(addForm.riskProfile),
         alertChannels: ["email"],
-        riskThresholds:
-          suggestedRequest.riskThresholds ||
-          getRiskThresholds(addForm.riskProfile),
-        ...(discoveredTokens?.length ? { discoveredTokens } : {}),
       });
-
-      // Optional: one-off CRE run for initial risk assessment (non-blocking)
-      runInitialScanForContract({
-        address: suggestedRequest.address,
-        name: suggestedRequest.name,
-        chainSelectorName: suggestedRequest.chainSelectorName,
-        riskThresholds: suggestedRequest.riskThresholds,
-        priceFeeds: suggestedRequest.priceFeeds,
-      }).then((assessment) => {
-        if (assessment) {
-          getOverview().then((res) => {
-            if (res?.data?.contracts) setLiveContracts(res.data.contracts);
-          });
-        }
-      }).catch(() => {});
-
-      // 3. Refresh overview
-      const overviewResponse = await getOverview();
-      const data = overviewResponse.data;
-
-      // Update state with new data
-      setLiveKpis([
-        {
-          title: "Monitored Contracts",
-          value: `${data.kpis.monitoredContracts}`,
-          change: "Live from bridge API",
-          icon: FileCode2,
-          color: "text-primary",
-          bgColor: "bg-primary/10",
-        },
-        {
-          title: "Active Alerts",
-          value: `${data.kpis.activeAlerts}`,
-          change: `${data.kpis.activeAlerts} currently active`,
-          icon: AlertTriangle,
-          color: "text-danger",
-          bgColor: "bg-danger/10",
-        },
-        {
-          title: "Total Value Locked",
-          value: formatTvl(data.kpis.totalValueLocked),
-          change: "Derived from monitored contracts",
-          icon: TrendingUp,
-          color: "text-success",
-          bgColor: "bg-success/10",
-        },
-        {
-          title: "Risk Score",
-          value: `${data.kpis.riskScore}/100`,
-          change: data.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing",
-          icon: ShieldCheck,
-          color: data.kpis.riskScore >= 70 ? "text-warning" : "text-success",
-          bgColor:
-            data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
-        },
-      ]);
-      setLiveContracts(data.contracts);
-      setLiveAlerts(data.alerts);
-      setSystemStatus({
-        oracle: data.system.oracle,
-        riskEngine: data.system.riskEngine,
-        alertService: data.system.alertService,
-        lastSync: data.system.lastSync,
-      });
-
-      // Reset form and close dialog
-      setAddForm({
-        address: "",
-        chain: "ethereumMainnet",
-        name: "",
-        protocol: "Normal",
-        riskProfile: "balanced",
-        customChainName: "",
-        customChainSelectorName: "",
-        customRpcUrl: "",
-        customChainId: "",
-      });
-      setDetectMessage(null);
+      const res = await getOverview();
+      const d = res?.data;
+      if (d) {
+        setLiveKpis([
+          { title: "Monitored Contracts", value: `${d.kpis.monitoredContracts}`, change: "Live from bridge API", icon: FileCode2, color: "text-primary", bgColor: "bg-primary/10" },
+          { title: "Active Alerts", value: `${d.kpis.activeAlerts}`, change: `${d.kpis.activeAlerts} currently active`, icon: AlertTriangle, color: "text-danger", bgColor: "bg-danger/10" },
+          { title: "Total Value Locked", value: formatTvl(d.kpis.totalValueLocked), change: "Derived from monitored contracts", icon: TrendingUp, color: "text-success", bgColor: "bg-success/10" },
+          { title: "Risk Score", value: `${d.kpis.riskScore}/100`, change: d.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing", icon: ShieldCheck, color: d.kpis.riskScore >= 70 ? "text-warning" : "text-success", bgColor: d.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10" },
+        ]);
+        setLiveContracts(d.contracts);
+        setLiveAlerts(d.alerts);
+        setSystemStatus({ oracle: d.system.oracle, riskEngine: d.system.riskEngine, alertService: d.system.alertService, lastSync: d.system.lastSync });
+      }
+      setAddForm({ address: "", chain: "ethereumMainnet", name: "", protocol: "Normal", riskProfile: "balanced", customChainName: "", customChainSelectorName: "", customRpcUrl: "", customChainId: "" });
       setIsAddDialogOpen(false);
+      toast.success("Contract added", { description: "Open the contract and run Full Analysis to start monitoring." });
     } catch (err) {
       console.error("Failed to add contract", err);
-      setAddError(
-        "Failed to auto-discover and add contract. Check API availability.",
-      );
+      setAddError("Failed to save contract. Try again.");
+      toast.error("Could not add contract");
     } finally {
       setIsAdding(false);
     }
@@ -611,8 +537,6 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
-      {/* Hero / Header Section */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -888,7 +812,6 @@ export default function DashboardPage() {
             </DialogContent>
           </Dialog>
         </motion.div>
-      </div>
 
       {/* KPI GRID */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
