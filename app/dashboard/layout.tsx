@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTheme } from "next-themes";
 import {
-  ShieldCheck,
   LayoutDashboard,
   FileCode2,
   Bell,
@@ -25,6 +24,7 @@ import {
   X,
   Globe,
 } from "lucide-react";
+import { Logo } from "@/components/logo";
 import * as framerMotion from "framer-motion";
 const motion =
   (framerMotion as any).motion ||
@@ -74,7 +74,7 @@ export default function DashboardLayout({
           <div className="flex items-center gap-8">
             <Link href="/dashboard" className="group flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 transition-all group-hover:bg-primary/20">
-                <ShieldCheck className="h-5 w-5 text-primary" />
+                <Logo size={24} />
               </div>
               <span className="hidden text-lg font-bold tracking-tight text-foreground sm:block">
                 ChainGuard<span className="text-primary">.</span>

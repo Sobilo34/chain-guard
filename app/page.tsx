@@ -1,18 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  ShieldCheck,
   ArrowRight,
   Activity,
   Zap,
   Lock,
   Globe,
 } from "lucide-react";
+import { Logo } from "@/components/logo";
 import * as framerMotion from "framer-motion";
 const motion =
   (framerMotion as any).motion ||
@@ -108,10 +109,9 @@ export default function LoginPage() {
       {/* Header with Connect Wallet Button */}
       <header className="absolute top-0 left-0 right-0 z-20 p-6">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">ChainGuard</span>
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <Logo size={24} showWordmark showDot />
+          </Link>
           {!isConnected ? (
             <Button
               onClick={() => open({ view: "Connect" })}
@@ -205,7 +205,7 @@ export default function LoginPage() {
               {!isConnected ? (
                 <div className="flex flex-col items-center gap-4">
                   <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 border border-white/10 shadow-inner">
-                    <ShieldCheck className="h-8 w-8 text-primary" />
+                    <Logo size={40} className="text-primary" />
                   </div>
                   <div className="text-center">
                     <h3 className="text-lg font-semibold">
@@ -240,7 +240,7 @@ export default function LoginPage() {
                   >
                     <div className="flex flex-col items-center gap-4">
                       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 border border-white/10 shadow-inner">
-                        <ShieldCheck className="h-8 w-8 text-primary" />
+                        <Logo size={40} className="text-primary" />
                       </div>
                       <div className="text-center">
                         <h3 className="text-lg font-semibold">

@@ -19,20 +19,7 @@ export const metadata: Metadata = {
     "Secure your smart contracts with AI-powered market risk monitoring. Monitor volatility, liquidity, depegs, and manipulations in real-time.",
   generator: "v0.app",
   icons: {
-    icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
-    ],
+    icon: "/logo.svg",
     apple: "/apple-icon.png",
   },
 };
