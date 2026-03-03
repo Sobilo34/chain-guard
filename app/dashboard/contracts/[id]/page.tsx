@@ -806,6 +806,273 @@ export default function ContractDetailPage({
         ))}
       </div>
 
+      {/* AI Risk Intelligence */}
+      {(() => {
+            const fa = data.fullAnalysis?.finalAnalysis;
+            const scan = data.latestScan;
+            const reasoning = fa?.summary ?? scan?.reasoning;
+            const cause = fa?.rootCause ?? scan?.cause;
+            const consequences = fa?.potentialImpact ?? scan?.consequences;
+            const mitigationStrategy = scan?.mitigationStrategy ?? (fa?.recommendations?.length ? fa.recommendations.join("\n\n") : undefined);
+            const nextSteps = fa?.nextSteps ?? scan?.nextSteps;
+            const suggestedActions = fa?.suggestedActions ?? scan?.suggestedActions;
+            if (!data.fullAnalysis && !data.latestScan) return null;
+            return (
+            <div className="space-y-6">
+              <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
+                <Zap className="h-5 w-5 text-primary fill-primary" />
+                AI Risk Intelligence
+              </h3>
+              
+              <div className="rounded-[2.5rem] border border-primary/20 bg-primary/5 p-8 backdrop-blur-xl">
+                <div className="space-y-6">
+                  {/* Executive Summary - always visible */}
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
+                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10 whitespace-pre-wrap">
+                      {reasoning || "Run Full Analysis or Force Scan for an AI summary."}
+                    </p>
+                  </div>
+
+                  {/* Collapsible sections */}
+                  <Accordion type="multiple" className="w-full space-y-2" defaultValue={["root-cause", "mitigation"]}>
+                    <AccordionItem value="root-cause" className="border border-border/40 rounded-2xl px-4">
+                      <AccordionTrigger className="text-[10px] font-black uppercase text-foreground/90 hover:no-underline py-4">
+                        Root Cause & Potential Impact
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-4">
+                        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                          <div className="space-y-3">
+                            <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
+                               <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                               Root Cause Analysis
+                            </h5>
+                            <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02] whitespace-pre-wrap">
+                              {cause || "Run Full Analysis or Force Scan (with post-CRE AI) for root cause analysis."}
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
+                               <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                               Potential Impact
+                            </h5>
+                            <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
+                              {consequences || "Run Full Analysis or Force Scan for impact assessment."}
+                            </p>
+                          </div>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    {(scan?.estimatedImpact ?? consequences) && (
+                      <AccordionItem value="estimated-impact" className="border border-border/40 rounded-2xl px-4">
+                        <AccordionTrigger className="text-[10px] font-black uppercase text-foreground/90 hover:no-underline py-4">
+                          Estimated Impact (Financial & Operational)
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-4">
+                          <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
+                            {scan?.estimatedImpact ?? consequences}
+                          </p>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )}
+
+                    {scan?.affectedMetrics && scan.affectedMetrics.length > 0 && (
+                      <AccordionItem value="affected-metrics" className="border border-border/40 rounded-2xl px-4">
+                        <AccordionTrigger className="text-[10px] font-black uppercase text-foreground/90 hover:no-underline py-4">
+                          Affected / Reviewed Metrics
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-4">
+                          <div className="flex flex-wrap gap-2">
+                            {scan.affectedMetrics.map((m: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="rounded-full text-[10px] font-bold uppercase">
+                                {m}
+                              </Badge>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )}
+
+                    <AccordionItem value="mitigation" className="border border-border/40 rounded-2xl px-4">
+                      <AccordionTrigger className="text-[10px] font-black uppercase text-foreground/90 hover:no-underline py-4">
+                        {["high", "critical"].includes((scan?.riskLevel || data.riskLevel || "").toLowerCase())
+                          ? "Technical Mitigation Strategy"
+                          : "Recommendations to Safeguard This Contract"}
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-4">
+                        <div className="text-xs font-semibold leading-relaxed text-foreground/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] whitespace-pre-wrap">
+                          {mitigationStrategy || "Run Full Analysis or Force Scan (with post-CRE AI) for recommendations."}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+
+                    {nextSteps && nextSteps.length > 0 && (
+                      <AccordionItem value="action-items" className="border border-border/40 rounded-2xl px-4">
+                        <AccordionTrigger className="text-[10px] font-black uppercase text-foreground/90 hover:no-underline py-4">
+                          Immediate Action Items
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-4">
+                          <div className="space-y-2">
+                            {nextSteps.map((step: string, i: number) => (
+                              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                                  {i + 1}
+                                </div>
+                                <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">{step}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )}
+
+                    {suggestedActions && suggestedActions.length > 0 && (
+                      <AccordionItem value="long-term" className="border border-border/40 rounded-2xl px-4">
+                        <AccordionTrigger className="text-[10px] font-black uppercase text-foreground/90 hover:no-underline py-4">
+                          {["high", "critical"].includes((scan?.riskLevel || data.riskLevel || "").toLowerCase())
+                            ? "Long-term Actions"
+                            : "Tips to Safeguard for Future Occurrence"}
+                        </AccordionTrigger>
+                        <AccordionContent className="pb-4">
+                          <ul className="space-y-2">
+                            {suggestedActions.map((action: string, i: number) => (
+                              <li key={i} className="flex items-start gap-2 text-xs font-semibold text-foreground/85">
+                                <ChevronRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
+                                <span>{action}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )}
+                  </Accordion>
+                </div>
+              </div>
+            </div>
+            );
+          })()}
+
+      {/* Main Grid */}
+      <div className="grid gap-8 lg:grid-cols-3">
+        <div className="space-y-8 lg:col-span-2">
+          {/* Volatility Chart */}
+          <Card className="overflow-hidden rounded-[2.5rem] border-border/40 bg-card/20 backdrop-blur-xl">
+            <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 px-8 py-6">
+              <div>
+                <CardTitle className="text-xl font-black tracking-tight">
+                  Market Variance
+                </CardTitle>
+                <CardDescription className="text-xs font-medium text-muted-foreground">
+                  Rolling 7-day volatility analysis.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-black text-emerald-500 uppercase tracking-wider">
+                <Activity className="h-3 w-3" />
+                Stable Stream
+              </div>
+            </CardHeader>
+            <CardContent className="p-8">
+              <div className="h-[320px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={volatilityHistory}>
+                    <defs>
+                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgb(56 189 248)" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="rgb(56 189 248)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="rgb(148 163 184)"
+                      strokeOpacity={0.6}
+                    />
+                    <XAxis
+                      dataKey="time"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fontWeight: 600, fill: "rgb(148 163 184)" }}
+                      dy={10}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fontWeight: 600, fill: "rgb(148 163 184)" }}
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <Tooltip
+                      content={<CustomTooltip />}
+                      cursor={{ stroke: "rgb(56 189 248)", strokeWidth: 1, strokeDasharray: "4 4" }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="rgb(56 189 248)"
+                      strokeWidth={3}
+                      fill="url(#chartGrad)"
+                      animationDuration={2000}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Action Center - Sidebar */}
+        <div className="space-y-8">
+          {/* Risk Health */}
+          <Card className="rounded-[2.5rem] border-border/40 bg-card/40 backdrop-blur-xl">
+            <CardHeader className="px-8 pt-8">
+              <CardTitle className="text-lg font-black tracking-tight">
+                Sentinel Health
+              </CardTitle>
+              <CardDescription className="text-xs font-medium text-muted-foreground/60 uppercase tracking-widest">
+                Aggregate Risk Score
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-8 pb-8">
+              <div className="relative flex items-center justify-center py-6">
+                <div className="text-center">
+                  <span className="text-6xl font-black tracking-tighter text-foreground">
+                    {data.riskScore}
+                  </span>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
+                    {data.riskScore < 40
+                      ? "Low"
+                      : data.riskScore < 75
+                        ? "Nominal"
+                        : "Warning"}
+                  </p>
+                </div>
+                {/* Animated Pulse around score */}
+                <div className="absolute inset-x-0 inset-y-0 -z-10 bg-emerald-500/5 blur-3xl rounded-full" />
+              </div>
+
+              <div className="mt-8 space-y-4">
+                {riskBreakdown.map((item: any, i: number) => (
+                  <div key={i} className="space-y-1.5">
+                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-widest">
+                      <span className="text-muted-foreground">{item.name}</span>
+                      <span className="text-foreground">{item.value}%</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${item.value}%` }}
+                        transition={{ duration: 1, delay: i * 0.2 }}
+                        className="h-full rounded-full bg-primary"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Full Analysis (Pre-CRE + CRE + Post-CRE) */}
       {analyzeResult && (
         <Card className="overflow-hidden rounded-[2.5rem] border-border/40 bg-card/20 backdrop-blur-xl">
@@ -891,330 +1158,79 @@ export default function ContractDetailPage({
         </Card>
       )}
 
-      {/* Main Grid */}
-      <div className="grid gap-8 lg:grid-cols-3">
-        <div className="space-y-8 lg:col-span-2">
-          {/* Volatility Chart */}
-          <Card className="overflow-hidden rounded-[2.5rem] border-border/40 bg-card/20 backdrop-blur-xl">
-            <CardHeader className="flex flex-row items-center justify-between border-b border-border/40 px-8 py-6">
-              <div>
-                <CardTitle className="text-xl font-black tracking-tight">
-                  Market Variance
-                </CardTitle>
-                <CardDescription className="text-xs font-medium text-muted-foreground">
-                  Rolling 7-day volatility analysis.
-                </CardDescription>
+      {/* Machine Learning Forensics */}
+      <div className="space-y-6">
+        <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
+          <Sparkles className="h-5 w-5 text-amber-500 fill-amber-500" />
+          Machine Learning Forensics
+        </h3>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {aiSuggestions.map((suggestion: AISuggestion, i: number) => (
+            <motion.div
+              key={i}
+              whileHover={{ y: -5 }}
+              className="rounded-[2rem] border border-border/40 bg-card/40 p-6 backdrop-blur-xl"
+            >
+              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[1rem] bg-background/50 shadow-inner">
+                <Zap className="h-5 w-5 text-primary" />
               </div>
-              <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-black text-emerald-500 uppercase tracking-wider">
-                <Activity className="h-3 w-3" />
-                Stable Stream
-              </div>
-            </CardHeader>
-            <CardContent className="p-8">
-              <div className="h-[320px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={volatilityHistory}>
-                    <defs>
-                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgb(56 189 248)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="rgb(56 189 248)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="rgb(148 163 184)"
-                      strokeOpacity={0.6}
-                    />
-                    <XAxis
-                      dataKey="time"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fontWeight: 600, fill: "rgb(148 163 184)" }}
-                      dy={10}
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 12, fontWeight: 600, fill: "rgb(148 163 184)" }}
-                      tickFormatter={(v) => `${v}%`}
-                    />
-                    <Tooltip
-                      content={<CustomTooltip />}
-                      cursor={{ stroke: "rgb(56 189 248)", strokeWidth: 1, strokeDasharray: "4 4" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke="rgb(56 189 248)"
-                      strokeWidth={3}
-                      fill="url(#chartGrad)"
-                      animationDuration={2000}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Detailed AI Risk Intelligence (from persisted Full Analysis or latestScan from Force Scan) */}
-          {(() => {
-            const fa = data.fullAnalysis?.finalAnalysis;
-            const scan = data.latestScan;
-            const reasoning = fa?.summary ?? scan?.reasoning;
-            const cause = fa?.rootCause ?? scan?.cause;
-            const consequences = fa?.potentialImpact ?? scan?.consequences;
-            const mitigationStrategy = scan?.mitigationStrategy ?? (fa?.recommendations?.length ? fa.recommendations.join("\n\n") : undefined);
-            const nextSteps = fa?.nextSteps ?? scan?.nextSteps;
-            const suggestedActions = fa?.suggestedActions ?? scan?.suggestedActions;
-            if (!data.fullAnalysis && !data.latestScan) return null;
-            return (
-            <div className="space-y-6">
-              <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
-                <Zap className="h-5 w-5 text-primary fill-primary" />
-                AI Risk Intelligence
-              </h3>
-              
-              <div className="rounded-[2.5rem] border border-primary/20 bg-primary/5 p-8 backdrop-blur-xl">
-                <div className="space-y-6">
-                  {/* Executive Summary */}
-                  <div className="space-y-3">
-                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
-                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10 whitespace-pre-wrap">
-                      {reasoning || "Run Full Analysis or Force Scan for an AI summary."}
-                    </p>
-                  </div>
-
-                  {/* Root Cause & Consequences */}
-                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
-                         <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                         Root Cause Analysis
-                      </h5>
-                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02] whitespace-pre-wrap">
-                        {cause || "Run Full Analysis or Force Scan (with post-CRE AI) for root cause analysis."}
-                      </p>
-                    </div>
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
-                         <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                         Potential Impact
-                      </h5>
-                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
-                        {consequences || "Run Full Analysis or Force Scan for impact assessment."}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Estimated Impact (financial/operational) */}
-                  {(scan?.estimatedImpact ?? consequences) && (
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
-                        <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                        Estimated Impact (Financial & Operational)
-                      </h5>
-                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
-                        {scan?.estimatedImpact ?? consequences}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Affected Metrics */}
-                  {scan?.affectedMetrics && scan.affectedMetrics.length > 0 && (
-                    <div className="space-y-3">
-                      <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Affected / Reviewed Metrics</h5>
-                      <div className="flex flex-wrap gap-2">
-                        {scan.affectedMetrics.map((m: string, i: number) => (
-                          <Badge key={i} variant="secondary" className="rounded-full text-[10px] font-bold uppercase">
-                            {m}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Mitigation & Safeguard Strategy */}
-                  <div className="space-y-3 pt-2 border-t border-primary/10">
-                    <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
-                      <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {["high", "critical"].includes((scan?.riskLevel || data.riskLevel || "").toLowerCase())
-                        ? "Technical Mitigation Strategy"
-                        : "Recommendations to Safeguard This Contract"}
-                    </h5>
-                    <div className="text-xs font-semibold leading-relaxed text-foreground/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] whitespace-pre-wrap">
-                      {mitigationStrategy || "Run Full Analysis or Force Scan (with post-CRE AI) for recommendations."}
-                    </div>
-                  </div>
-
-                  {/* Immediate Action Items */}
-                  {nextSteps && nextSteps.length > 0 && (
-                     <div className="space-y-4 pt-4 border-t border-primary/10">
-                       <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Immediate Action Items</h5>
-                       <div className="space-y-2">
-                         {nextSteps.map((step: string, i: number) => (
-                           <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
-                             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
-                               {i + 1}
-                             </div>
-                             <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">{step}</span>
-                           </div>
-                         ))}
-                       </div>
-                     </div>
-                  )}
-
-                  {/* Long-term Suggested Actions (safeguard tips) */}
-                  {suggestedActions && suggestedActions.length > 0 && (
-                    <div className="space-y-4 pt-4 border-t border-primary/10">
-                      <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">
-                        {["high", "critical"].includes((scan?.riskLevel || data.riskLevel || "").toLowerCase())
-                          ? "Long-term Actions"
-                          : "Tips to Safeguard for Future Occurrence"}
-                      </h5>
-                      <ul className="space-y-2">
-                        {suggestedActions.map((action: string, i: number) => (
-                          <li key={i} className="flex items-start gap-2 text-xs font-semibold text-foreground/85">
-                            <ChevronRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
-                            <span>{action}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            );
-          })()}
-
-          {/* AI Strategy Insights */}
-          <div className="space-y-6">
-            <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
-              <Sparkles className="h-5 w-5 text-amber-500 fill-amber-500" />
-              Machine Learning Forensics
-            </h3>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {aiSuggestions.map((suggestion: AISuggestion, i: number) => (
-                <motion.div
-                  key={i}
-                  whileHover={{ y: -5 }}
-                  className="rounded-[2rem] border border-border/40 bg-card/40 p-6 backdrop-blur-xl"
-                >
-                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[1rem] bg-background/50 shadow-inner">
-                    <Zap className="h-5 w-5 text-primary" />
-                  </div>
-                  <h4 className="mb-2 text-sm font-black text-foreground">
-                    {suggestion.title}
-                  </h4>
-                  <p className="text-xs font-medium leading-relaxed text-muted-foreground">
-                    {suggestion.description}
-                  </p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Action Center - Sidebar */}
-        <div className="space-y-8">
-          {/* Risk Health */}
-          <Card className="rounded-[2.5rem] border-border/40 bg-card/40 backdrop-blur-xl">
-            <CardHeader className="px-8 pt-8">
-              <CardTitle className="text-lg font-black tracking-tight">
-                Sentinel Health
-              </CardTitle>
-              <CardDescription className="text-xs font-medium text-muted-foreground/60 uppercase tracking-widest">
-                Aggregate Risk Score
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="px-8 pb-8">
-              <div className="relative flex items-center justify-center py-6">
-                <div className="text-center">
-                  <span className="text-6xl font-black tracking-tighter text-foreground">
-                    {data.riskScore}
-                  </span>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">
-                    {data.riskScore < 40
-                      ? "Low"
-                      : data.riskScore < 75
-                        ? "Nominal"
-                        : "Warning"}
-                  </p>
-                </div>
-                {/* Animated Pulse around score */}
-                <div className="absolute inset-x-0 inset-y-0 -z-10 bg-emerald-500/5 blur-3xl rounded-full" />
-              </div>
-
-              <div className="mt-8 space-y-4">
-                {riskBreakdown.map((item: any, i: number) => (
-                  <div key={i} className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-bold uppercase tracking-widest">
-                      <span className="text-muted-foreground">{item.name}</span>
-                      <span className="text-foreground">{item.value}%</span>
-                    </div>
-                    <div className="h-1.5 w-full rounded-full bg-muted/30 overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${item.value}%` }}
-                        transition={{ duration: 1, delay: i * 0.2 }}
-                        className="h-full rounded-full bg-primary"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Event Log */}
-          <Card className="rounded-[2.5rem] border-border/40 bg-card/20 backdrop-blur-xl">
-            <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-lg font-black tracking-tight">
-                  Audit Log
-                </CardTitle>
-                <CardDescription className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">
-                  Recent Signals
-                </CardDescription>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full border border-border/40"
-              >
-                <Clock className="h-4 w-4" />
-              </Button>
-            </CardHeader>
-            <CardContent className="px-8 pb-8 space-y-4">
-              {historicalAlerts.map((alert: HistoricalAlert, i: number) => (
-                <div
-                  key={i}
-                  className="flex items-start gap-3 rounded-2xl border border-border/40 bg-background/40 p-4 transition-colors hover:bg-background/60"
-                >
-                  <div
-                    className={`mt-1 h-2 w-2 rounded-full ${alert.severity === "high" ? "bg-rose-500" : alert.severity === "medium" ? "bg-amber-500" : "bg-emerald-500"}`}
-                  />
-                  <div className="space-y-1">
-                    <p className="text-xs font-black text-foreground">
-                      {alert.type}
-                    </p>
-                    <p className="text-[10px] font-medium text-muted-foreground">
-                      {alert.time}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              <Button
-                variant="outline"
-                className="h-11 w-full rounded-2xl border-border/40 font-bold text-xs uppercase tracking-widest"
-              >
-                Full History
-              </Button>
-            </CardContent>
-          </Card>
+              <h4 className="mb-2 text-sm font-black text-foreground">
+                {suggestion.title}
+              </h4>
+              <p className="text-xs font-medium leading-relaxed text-muted-foreground">
+                {suggestion.description}
+              </p>
+            </motion.div>
+          ))}
         </div>
       </div>
+
+      {/* Audit Log - last */}
+      <Card className="rounded-[2.5rem] border-border/40 bg-card/20 backdrop-blur-xl">
+        <CardHeader className="px-8 pt-8 flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-lg font-black tracking-tight">
+              Audit Log
+            </CardTitle>
+            <CardDescription className="text-[10px] font-black text-muted-foreground/40 uppercase tracking-widest">
+              Recent Signals
+            </CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full border border-border/40"
+          >
+            <Clock className="h-4 w-4" />
+          </Button>
+        </CardHeader>
+        <CardContent className="px-8 pb-8 space-y-4">
+          {historicalAlerts.map((alert: HistoricalAlert, i: number) => (
+            <div
+              key={i}
+              className="flex items-start gap-3 rounded-2xl border border-border/40 bg-background/40 p-4 transition-colors hover:bg-background/60"
+            >
+              <div
+                className={`mt-1 h-2 w-2 rounded-full ${alert.severity === "high" ? "bg-rose-500" : alert.severity === "medium" ? "bg-amber-500" : "bg-emerald-500"}`}
+              />
+              <div className="space-y-1">
+                <p className="text-xs font-black text-foreground">
+                  {alert.type}
+                </p>
+                <p className="text-[10px] font-medium text-muted-foreground">
+                  {alert.time}
+                </p>
+              </div>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            className="h-11 w-full rounded-2xl border-border/40 font-bold text-xs uppercase tracking-widest"
+          >
+            Full History
+          </Button>
+        </CardContent>
+      </Card>
     </div>
     </>
   );
