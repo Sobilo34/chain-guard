@@ -63,11 +63,30 @@ import {
   Settings,
   Zap,
   ChevronRight,
+  Pencil,
+  Check,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { getContractDetail, runAnalyze, type AnalyzeResult } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
+
+const DEFAULT_RISK_THRESHOLDS = {
+  depegTolerance: 0.02,
+  volatilityMax: 0.15,
+  liquidityDropMax: 0.25,
+  collateralRatioMin: 1.5,
+};
 
 interface HistoryItem {
   time: string;
@@ -99,6 +118,10 @@ export default function ContractDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
+  const [tuningOpen, setTuningOpen] = useState(false);
+  const [thresholdForm, setThresholdForm] = useState(DEFAULT_RISK_THRESHOLDS);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -106,6 +129,8 @@ export default function ContractDetailPage({
         const detail = await getContractDetail(contractAddress);
         setData(detail);
         setError(null);
+        setEditedName(detail?.name ?? "");
+        setThresholdForm({ ...DEFAULT_RISK_THRESHOLDS, ...(detail?.riskThresholds || {}) });
         if (detail?.fullAnalysis) {
           setAnalyzeResult(detail.fullAnalysis);
         }
@@ -167,6 +192,7 @@ export default function ContractDetailPage({
         riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
         status: result.creObservations?.riskLevel || "LOW",
         riskScore: result.creObservations?.riskScore,
+        metrics: result.creObservations?.metrics ? { ...data.metrics, ...result.creObservations.metrics } : undefined,
       });
       setData((prev: any) => prev ? { ...prev, fullAnalysis: result, latestScan: latestScanFromAnalysis } : prev);
 
@@ -217,30 +243,35 @@ export default function ContractDetailPage({
     );
   }
 
-  // Use the fetched data
+  // Use the fetched data; prefer CRE-returned metrics (from last Full Analysis or Force Scan) when available for correct calculated values
+  const metrics = data.fullAnalysis?.creObservations?.metrics
+    ? { ...data.metrics, ...data.fullAnalysis.creObservations.metrics }
+    : data.metrics;
   const contractData = {
     id: data.address,
     name: data.name,
     address: data.address,
     chain: data.chain,
     status: data.riskLevel.toLowerCase(),
-    tvl: (data.metrics?.tvl !== undefined || data.metrics?.totalValueLocked !== undefined)
-      ? `$${((data.metrics?.tvl || data.metrics?.totalValueLocked) / 1000000).toFixed(1)}M`
+    tvl: (metrics?.tvl !== undefined || metrics?.totalValueLocked !== undefined)
+      ? `$${((metrics?.tvl || metrics?.totalValueLocked) / 1000000).toFixed(1)}M`
       : (data.tvl && data.tvl !== "$0.0M") ? data.tvl : "$0.0M",
-    price: (data.metrics?.currentPrice !== undefined || data.metrics?.price !== undefined) 
-      ? `$${(data.metrics?.currentPrice || data.metrics?.price).toFixed(2)}` 
+    price: (metrics?.currentPrice !== undefined || metrics?.price !== undefined)
+      ? `$${(metrics?.currentPrice || metrics?.price).toFixed(2)}`
       : (data.price && data.price !== "$0.00") ? data.price : "$0.00",
-    volume24h: (data.metrics?.volume24h && data.metrics.volume24h > 0)
-      ? `$${(data.metrics.volume24h / 1000000).toFixed(1)}M`
+    volume24h: (metrics?.volume24h != null && metrics.volume24h > 0)
+      ? `$${(metrics.volume24h / 1000000).toFixed(1)}M`
       : data.volume24h || "$0.0M",
-    liquidity: (data.metrics?.liquidity !== undefined || data.metrics?.totalLiquidity !== undefined)
-      ? `${(data.metrics?.liquidity || (data.metrics?.totalLiquidity > 100 ? 98 : data.metrics?.totalLiquidity)).toFixed(0)}%`
+    liquidity: (metrics?.liquidity !== undefined || metrics?.totalLiquidity !== undefined)
+      ? `${(metrics?.liquidity != null ? metrics.liquidity : (metrics?.totalLiquidity > 100 ? 98 : metrics?.totalLiquidity ?? 0)).toFixed(0)}%`
       : data.liquidity || "0%",
   };
 
-  // Real volatility: prefer history from API, else build series from current metrics or parsed contract.volatility
+  // Real volatility: prefer CRE/metrics, then history, then parsed contract.volatility
   const currentVolatility =
-    typeof data.metrics?.volatility === "number"
+    typeof metrics?.volatility === "number"
+      ? metrics.volatility <= 1 ? metrics.volatility * 100 : metrics.volatility
+      : typeof data.metrics?.volatility === "number"
       ? data.metrics.volatility <= 1 ? data.metrics.volatility * 100 : data.metrics.volatility
       : (() => {
           const v = data.volatility;
@@ -283,12 +314,12 @@ export default function ContractDetailPage({
   const riskBreakdown = [
     {
       name: "Volatility",
-      value: data.metrics?.volatility ? Math.round(data.metrics.volatility * 100) : (data.riskScore > 30 ? 30 : data.riskScore),
+      value: metrics?.volatility != null ? Math.round(Number(metrics.volatility) * (metrics.volatility <= 1 ? 100 : 1)) : (data.riskScore > 30 ? Math.min(100, data.riskScore) : 23),
       color: "hsl(var(--chart-1))",
     },
-    { name: "Liquidity", value: (data.metrics?.liquidity || data.metrics?.totalLiquidity) ? Math.round(data.metrics?.liquidity || 20) : 20, color: "hsl(var(--chart-2))" },
-    { name: "Manipulation", value: 15, color: "hsl(var(--chart-3))" },
-    { name: "Depeg", value: (data.metrics?.priceDeviationFromPeg !== undefined) ? Math.round(data.metrics.priceDeviationFromPeg * 100) : (data.riskScore > 50 ? 35 : 5), color: "hsl(var(--chart-4))" },
+    { name: "Liquidity", value: (metrics?.liquidity != null || metrics?.totalLiquidity != null) ? Math.round(metrics?.liquidity ?? (metrics?.totalLiquidity > 1 ? metrics.totalLiquidity * 100 : (metrics?.totalLiquidity ?? 0.2) * 100)) : 20, color: "hsl(var(--chart-2))" },
+    { name: "Manipulation", value: (metrics as any)?.manipulation != null ? Math.round((metrics as any).manipulation * 100) : 15, color: "hsl(var(--chart-3))" },
+    { name: "Depeg", value: (metrics?.priceDeviationFromPeg != null) ? Math.round(Number(metrics.priceDeviationFromPeg) * (metrics.priceDeviationFromPeg <= 1 ? 100 : 1)) : (data.riskScore > 50 ? 35 : 5), color: "hsl(var(--chart-4))" },
   ];
 
   const CustomTooltip = ({
@@ -348,10 +379,68 @@ export default function ContractDetailPage({
               <Shield className="h-8 w-8" />
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight text-foreground lg:text-4xl">
-                {contractData.name}
-                <span className="text-primary italic">.</span>
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                {isEditingName ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={editedName}
+                      onChange={(e) => setEditedName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const name = editedName.trim() || contractData.name;
+                          const addr = (data.address || "").toLowerCase().trim();
+                          const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+                          ContractStorage.updateContract(with0x, { name });
+                          setData((p: any) => (p ? { ...p, name } : p));
+                          setEditedName(name);
+                          setIsEditingName(false);
+                          toast.success("Name updated");
+                        }
+                        if (e.key === "Escape") {
+                          setEditedName(contractData.name);
+                          setIsEditingName(false);
+                        }
+                      }}
+                      className="text-2xl font-black max-w-md h-12"
+                      autoFocus
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-emerald-500 hover:text-emerald-400"
+                      onClick={() => {
+                        const name = editedName.trim() || contractData.name;
+                        const addr = (data.address || "").toLowerCase().trim();
+                        const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+                        ContractStorage.updateContract(with0x, { name });
+                        setData((p: any) => (p ? { ...p, name } : p));
+                        setEditedName(name);
+                        setIsEditingName(false);
+                        toast.success("Name updated");
+                      }}
+                    >
+                      <Check className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <h1 className="text-3xl font-black tracking-tight text-foreground lg:text-4xl flex items-center gap-2">
+                    {contractData.name}
+                    <span className="text-primary italic">.</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
+                      onClick={() => {
+                        setEditedName(contractData.name);
+                        setIsEditingName(true);
+                      }}
+                      title="Edit contract name"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </h1>
+                )}
+              </div>
               <div className="mt-1 flex items-center gap-3">
                 <div className="flex items-center gap-1.5 rounded-full bg-muted/30 px-3 py-1 text-[11px] font-mono font-medium text-muted-foreground border border-border/40">
                   {contractData.address.slice(0, 10)}...
@@ -391,13 +480,89 @@ export default function ContractDetailPage({
             <Sparkles className={cn("mr-2 h-4 w-4", analyzeLoading && "animate-pulse")} />
             {analyzeLoading ? "Analyzing…" : "Full Analysis"}
           </Button>
-          <Button
-            variant="outline"
-            className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
-          >
-            <Settings className="mr-2 h-4 w-4" />
-            Tuning
-          </Button>
+          <Dialog open={tuningOpen} onOpenChange={(open) => {
+            setTuningOpen(open);
+            if (open && data?.riskThresholds) setThresholdForm({ ...DEFAULT_RISK_THRESHOLDS, ...data.riskThresholds });
+          }}>
+            <DialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                Tuning
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md rounded-2xl border-border/40 bg-card/80 backdrop-blur-xl">
+              <DialogHeader>
+                <DialogTitle className="text-lg font-black">CRE thresholds</DialogTitle>
+                <p className="text-sm text-muted-foreground">
+                  These values are used when triggering the Chainlink Risk Engine for this contract. Sensible defaults are set; you can adjust them per contract.
+                </p>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Depeg tolerance (0–0.1)</Label>
+                  <Input
+                    type="number"
+                    min={0.001}
+                    max={0.1}
+                    step={0.001}
+                    value={thresholdForm.depegTolerance}
+                    onChange={(e) => setThresholdForm((p) => ({ ...p, depegTolerance: Math.max(0.001, Math.min(0.1, Number(e.target.value) || 0.02)) }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Volatility max (0.05–0.5)</Label>
+                  <Input
+                    type="number"
+                    min={0.05}
+                    max={0.5}
+                    step={0.01}
+                    value={thresholdForm.volatilityMax}
+                    onChange={(e) => setThresholdForm((p) => ({ ...p, volatilityMax: Math.max(0.05, Math.min(0.5, Number(e.target.value) || 0.15)) }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Liquidity drop max (0.1–0.5)</Label>
+                  <Input
+                    type="number"
+                    min={0.1}
+                    max={0.5}
+                    step={0.01}
+                    value={thresholdForm.liquidityDropMax}
+                    onChange={(e) => setThresholdForm((p) => ({ ...p, liquidityDropMax: Math.max(0.1, Math.min(0.5, Number(e.target.value) || 0.25)) }))}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-xs font-bold uppercase text-muted-foreground">Collateral ratio min (1.0–3.0)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={3}
+                    step={0.1}
+                    value={thresholdForm.collateralRatioMin}
+                    onChange={(e) => setThresholdForm((p) => ({ ...p, collateralRatioMin: Math.max(1, Math.min(3, Number(e.target.value) || 1.5)) }))}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setTuningOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={() => {
+                    const addr = (data?.address || "").toLowerCase().trim();
+                    const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+                    ContractStorage.updateContract(with0x, { riskThresholds: { ...thresholdForm } });
+                    setData((p: any) => (p ? { ...p, riskThresholds: { ...thresholdForm } } : p));
+                    setTuningOpen(false);
+                    toast.success("CRE thresholds updated for this contract.");
+                  }}
+                >
+                  Save
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Button className="h-12 rounded-[1.25rem] bg-primary px-8 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95">
             <ExternalLink className="mr-2 h-4 w-4" />
             Etherscan
