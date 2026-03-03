@@ -33,6 +33,8 @@ export default function LoginPage() {
   const [alertEmail, setAlertEmailState] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  /** When wallet is connected: true = has email (redirect to dashboard), false = new user (show email form), null = still checking */
+  const [connectedUserHasEmail, setConnectedUserHasEmail] = useState<boolean | null>(null);
 
   useEffect(() => {
     setIsMounted(true);
@@ -40,7 +42,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!isMounted) return;
-    const saved = localStorage.getItem("chainguard.alertEmail");
+    const saved =
+      localStorage.getItem("chainguard.alertEmail") ??
+      localStorage.getItem("chainguard_alert_email");
     if (saved) setAlertEmailState(saved);
 
     getAlertEmail()
@@ -50,10 +54,30 @@ export default function LoginPage() {
           localStorage.setItem("chainguard.alertEmail", result.email);
         }
       })
-      .catch(() => {
-        // Ignore fetch errors here
-      });
+      .catch(() => {});
   }, [isMounted]);
+
+  // When wallet is connected, redirect to dashboard if user already has alert email (registered)
+  useEffect(() => {
+    if (!isMounted || !isConnected) {
+      setConnectedUserHasEmail(null);
+      return;
+    }
+    let cancelled = false;
+    getAlertEmail()
+      .then((result) => {
+        if (cancelled) return;
+        const hasEmail = !!(result.email && result.email.trim());
+        setConnectedUserHasEmail(hasEmail);
+        if (hasEmail) router.replace("/dashboard");
+      })
+      .catch(() => {
+        if (!cancelled) setConnectedUserHasEmail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isMounted, isConnected, router]);
 
   const handleGoToDashboard = async () => {
     const email = alertEmail.trim();
@@ -68,6 +92,7 @@ export default function LoginPage() {
     try {
       await setAlertEmail(email);
       localStorage.setItem("chainguard.alertEmail", email);
+      localStorage.setItem("chainguard_alert_email", email);
       router.push("/dashboard");
     } catch {
       setEmailError("Failed to save email. Check bridge API.");
@@ -190,6 +215,20 @@ export default function LoginPage() {
                       Connect your wallet to access the sentinel
                     </p>
                   </div>
+                </div>
+              ) : connectedUserHasEmail === null ? (
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 border border-white/10 shadow-inner">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  </div>
+                  <p className="text-sm text-white/50">Taking you to dashboard…</p>
+                </div>
+              ) : connectedUserHasEmail === true ? (
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/5 border border-white/10 shadow-inner">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  </div>
+                  <p className="text-sm text-white/50">Redirecting to dashboard…</p>
                 </div>
               ) : (
                 <AnimatePresence mode="wait">

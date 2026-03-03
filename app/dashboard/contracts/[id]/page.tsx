@@ -78,7 +78,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getContractDetail, runAnalyzeStream, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
-import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent } from "@/lib/format-metrics";
+import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent, formatSyncTime } from "@/lib/format-metrics";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 
@@ -259,12 +259,14 @@ export default function ContractDetailPage({
       metrics: result.creObservations?.metrics ? { ...data?.metrics, ...result.creObservations.metrics } : undefined,
       ...(discoveredTokens ? { discoveredTokens } : {}),
     });
+    const analyzedAt = new Date().toISOString();
     setData((prev: any) =>
       prev
         ? {
             ...prev,
             fullAnalysis: result,
             latestScan: latestScanFromAnalysis,
+            lastUpdate: analyzedAt,
             ...(discoveredTokens ? { discoveredTokens } : {}),
           }
         : prev
@@ -715,6 +717,12 @@ export default function ContractDetailPage({
                   <div className="h-1.5 w-1.5 rounded-full bg-[#627EEA] shadow-[0_0_8px_#627EEA]" />
                   Ethereum Mainnet
                 </Badge>
+                {data?.lastUpdate && (
+                  <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground" title={data.lastUpdate}>
+                    <Clock className="h-3 w-3" />
+                    Last analyzed: {formatSyncTime(data.lastUpdate)}
+                  </span>
+                )}
               </div>
             </div>
           </div>

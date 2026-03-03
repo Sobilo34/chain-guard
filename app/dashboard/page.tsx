@@ -341,13 +341,19 @@ export default function DashboardPage() {
         setScanMessage("Scan complete. Updating dashboard...");
       }
 
-      // Re-fetch overview so "Updated X ago" and KPIs reflect latest state
+      // Re-fetch overview so Sync time, KPIs, and contract lastUpdate reflect latest state
       setScanMessage("Scan complete. Syncing state...");
       await new Promise((resolve) => setTimeout(resolve, 300));
       const response = await getOverview();
       const data = response.data;
       setLiveContracts([...data.contracts]);
       setLiveAlerts([...data.alerts]);
+      setSystemStatus({
+        oracle: data.system.oracle,
+        riskEngine: data.system.riskEngine,
+        alertService: data.system.alertService,
+        lastSync: data.system.lastSync,
+      });
       setLiveKpis([
         {
           title: "Monitored Contracts",

@@ -93,6 +93,17 @@ export type DashboardAlert = {
   type: string;
   severity: "low" | "medium" | "high";
   status: "active" | "acknowledged" | "resolved";
+  /** Optional risk analysis for email and UI (AI summary, recommendations, etc.) */
+  details?: {
+    aiSummary?: string;
+    keyFindings?: string[];
+    recommendations?: string[];
+    rootCause?: string;
+    potentialImpact?: string;
+    nextSteps?: string[];
+    suggestedActions?: string[];
+    [key: string]: unknown;
+  };
 };
 
 export type OverviewPayload = {
@@ -433,15 +444,43 @@ export async function runGeminiScan(payload?: {
       }
 
       if (assessment.riskLevel === "HIGH" || assessment.riskLevel === "CRITICAL") {
-        ContractStorage.addAlert({
+        const cs = assessment.comprehensiveSummary;
+        const scan = assessment.latestScan || (assessment as unknown as ContractScanResult);
+        const scanTyped = scan as ContractScanResult;
+        const details = (cs || scan?.reasoning || scanTyped?.mitigationStrategy)
+          ? {
+              aiSummary: cs?.summary ?? scan?.reasoning,
+              rootCause: cs?.rootCause ?? scanTyped?.cause,
+              potentialImpact: cs?.potentialImpact ?? scanTyped?.consequences ?? scanTyped?.estimatedImpact,
+              keyFindings: cs?.keyFindings?.length ? cs.keyFindings : undefined,
+              recommendations: cs?.recommendations?.length
+                ? cs.recommendations
+                : scanTyped?.mitigationStrategy
+                  ? [scanTyped.mitigationStrategy]
+                  : undefined,
+              nextSteps: cs?.nextSteps ?? scanTyped?.nextSteps,
+              suggestedActions: cs?.suggestedActions ?? scanTyped?.suggestedActions,
+            }
+          : undefined;
+        const alertPayload = {
           timestamp: new Date().toISOString(),
           contract: address,
           contractName: contracts.find(c => normalizeAddr(c.address) === address)?.name || "Unknown",
           type: "High Risk Detected",
-          description: assessment.latestScan?.reasoning || "AI detected high risk during scan.",
+          description: scan?.reasoning || "AI detected high risk during scan.",
           severity: assessment.riskLevel.toLowerCase() as any,
-          status: "active"
-        });
+          status: "active" as const,
+          ...(details && Object.values(details).some(Boolean) ? { details } : {}),
+        };
+        const newAlert = ContractStorage.addAlert(alertPayload);
+        const email = typeof window !== "undefined" ? localStorage.getItem("chainguard_alert_email") : null;
+        if (email && email.trim()) {
+          fetch("/api/notifications/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to: email.trim(), alert: { ...alertPayload, id: newAlert.id } }),
+          }).catch(() => {});
+        }
       }
     });
   }
@@ -516,6 +555,19 @@ export async function deleteAlert(alertId: string) {
   return { success: removed };
 }
 
-export async function triggerTestEmail() {
-  return { success: true, message: "Test alert simulated locally." };
+export async function triggerTestEmail(): Promise<{ success: boolean; message: string }> {
+  const { email } = await getAlertEmail();
+  if (!email || !email.trim()) {
+    return { success: false, message: "Provide an alert email in settings first." };
+  }
+  const res = await fetch("/api/notifications/send-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to: email.trim(), test: true }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { success: false, message: (data.error as string) || "Failed to send test email." };
+  }
+  return { success: true, message: (data.message as string) || "Test email sent." };
 }
