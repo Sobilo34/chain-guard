@@ -167,9 +167,15 @@ Required fields:
 
 Return ONLY a JSON object: { "finalAnalysis": { "summary": "...", "keyFindings": [], "comparisonWithPreCRE": "...", "rootCause": "...", "potentialImpact": "...", "recommendations": [], "nextSteps": [], "suggestedActions": [] } }`;
 
+      const POST_CRE_AI_TIMEOUT_MS = 60_000;
       try {
-        const secondAi = await openRouterJson<SecondAiOut>(secondPrompt);
-        if (secondAi.finalAnalysis) {
+        const secondAi = await Promise.race([
+          openRouterJson<SecondAiOut>(secondPrompt),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Post-CRE AI timeout")), POST_CRE_AI_TIMEOUT_MS)
+          ),
+        ]);
+        if (secondAi?.finalAnalysis) {
           finalAnalysis = {
             summary: secondAi.finalAnalysis.summary ?? finalAnalysis.summary,
             keyFindings: secondAi.finalAnalysis.keyFindings ?? finalAnalysis.keyFindings,

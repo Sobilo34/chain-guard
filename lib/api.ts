@@ -215,11 +215,120 @@ export type AnalyzeResult = {
   aiChosenConfig?: { priceFeedPairs?: string[]; riskThresholds?: any; resolvedPriceFeeds?: any[] };
 };
 
+const ANALYZE_TIMEOUT_MS = 120_000; // 2 min for discover + pre-CRE + CRE + post-CRE
+
 export async function runAnalyze(address: string, network: string): Promise<AnalyzeResult> {
-  return fetchJson<AnalyzeResult>(`${API_BASE_URL}/analyze`, {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
+  try {
+    const out = await fetchJson<AnalyzeResult>(`${API_BASE_URL}/analyze`, {
+      method: "POST",
+      body: JSON.stringify({ address, network }),
+      signal: controller.signal,
+    });
+    return out;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export type NeedMoreInfoQuestion = { id: string; label: string; placeholder?: string };
+
+export type RunAnalyzeStreamCallbacks = {
+  onNarrative: (text: string) => void;
+  onResult: (result: AnalyzeResult) => void;
+  onError: (message: string) => void;
+  onNeedMoreInfo?: (questions: NeedMoreInfoQuestion[], message?: string) => void;
+};
+
+/** Consume the streaming analyze endpoint and invoke callbacks for each SSE event. */
+export async function runAnalyzeStream(
+  address: string,
+  network: string,
+  callbacks: RunAnalyzeStreamCallbacks,
+  userContext?: Record<string, string>
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/analyze/stream`, {
     method: "POST",
-    body: JSON.stringify({ address, network }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, network, ...(userContext && Object.keys(userContext).length > 0 ? { userContext } : {}) }),
+    cache: "no-store",
   });
+  if (!res.ok) {
+    const raw = await res.text();
+    callbacks.onError(raw || `API ${res.status}`);
+    return;
+  }
+  const reader = res.body?.getReader();
+  if (!reader) {
+    callbacks.onError("No response body");
+    return;
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() ?? "";
+      for (const block of lines) {
+        const dataLine = block.split("\n").find((l) => l.startsWith("data:"));
+        if (!dataLine) continue;
+        try {
+          const raw = dataLine.slice(5).trim();
+          if (raw === "[DONE]" || raw === "") continue;
+          const payload = JSON.parse(raw) as {
+            type: string;
+            text?: string;
+            message?: string;
+            result?: AnalyzeResult;
+            questions?: NeedMoreInfoQuestion[];
+          };
+          if (payload.type === "narrative" && typeof payload.text === "string") {
+            callbacks.onNarrative(payload.text);
+          } else if (payload.type === "result" && payload.result) {
+            callbacks.onResult(payload.result as AnalyzeResult);
+          } else if (payload.type === "error" && typeof payload.message === "string") {
+            callbacks.onError(payload.message);
+          } else if (payload.type === "needMoreInfo" && Array.isArray(payload.questions) && payload.questions.length > 0 && callbacks.onNeedMoreInfo) {
+            callbacks.onNeedMoreInfo(payload.questions, payload.message);
+          }
+        } catch {
+          // skip malformed chunk
+        }
+      }
+    }
+    if (buffer.trim()) {
+      const dataLine = buffer.split("\n").find((l) => l.startsWith("data:"));
+      if (dataLine) {
+        try {
+          const raw = dataLine.slice(5).trim();
+          const payload = JSON.parse(raw) as {
+            type: string;
+            text?: string;
+            message?: string;
+            result?: AnalyzeResult;
+            questions?: NeedMoreInfoQuestion[];
+          };
+          if (payload.type === "narrative" && typeof payload.text === "string") {
+            callbacks.onNarrative(payload.text);
+          } else if (payload.type === "result" && payload.result) {
+            callbacks.onResult(payload.result as AnalyzeResult);
+          } else if (payload.type === "error" && typeof payload.message === "string") {
+            callbacks.onError(payload.message);
+          } else if (payload.type === "needMoreInfo" && Array.isArray(payload.questions) && payload.questions.length > 0 && callbacks.onNeedMoreInfo) {
+            callbacks.onNeedMoreInfo(payload.questions, payload.message);
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 /** Payload for a one-off CRE run (e.g. initial scan after add). Same shape as suggestedRequest from discover. */

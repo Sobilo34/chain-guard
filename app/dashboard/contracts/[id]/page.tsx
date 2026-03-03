@@ -76,9 +76,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getContractDetail, runAnalyze, type AnalyzeResult } from "@/lib/api";
+import { getContractDetail, runAnalyzeStream, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 
 const DEFAULT_RISK_THRESHOLDS = {
@@ -122,6 +122,18 @@ export default function ContractDetailPage({
   const [editedName, setEditedName] = useState("");
   const [tuningOpen, setTuningOpen] = useState(false);
   const [thresholdForm, setThresholdForm] = useState(DEFAULT_RISK_THRESHOLDS);
+  const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState<
+    "discovering" | "pre-cre" | "cre" | "post-cre" | "complete" | "error"
+  >("discovering");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisLogLines, setAnalysisLogLines] = useState<string[]>([]);
+  const analysisLogRef = useRef<HTMLDivElement>(null);
+  const [analysisNeedMoreInfo, setAnalysisNeedMoreInfo] = useState<{
+    questions: NeedMoreInfoQuestion[];
+    message?: string;
+  } | null>(null);
+  const [needMoreInfoFormValues, setNeedMoreInfoFormValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -162,47 +174,110 @@ export default function ContractDetailPage({
     return "ethereumMainnet";
   })();
 
+  useEffect(() => {
+    if (analysisLogRef.current) {
+      analysisLogRef.current.scrollTop = analysisLogRef.current.scrollHeight;
+    }
+  }, [analysisLogLines]);
+
+  const applyAnalysisResult = (result: AnalyzeResult) => {
+    const addr = (data?.address || "").toLowerCase().trim();
+    const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+    const f = result.finalAnalysis;
+    const latestScanFromAnalysis = {
+      reasoning: f?.summary ?? result.creObservations?.latestScan?.reasoning,
+      cause: f?.rootCause,
+      consequences: f?.potentialImpact,
+      estimatedImpact: f?.potentialImpact,
+      mitigationStrategy: f?.recommendations?.length
+        ? f.recommendations.join("\n\n")
+        : undefined,
+      nextSteps: f?.nextSteps,
+      suggestedActions: f?.suggestedActions,
+      affectedMetrics: result.creObservations?.metrics ? Object.keys(result.creObservations.metrics) : undefined,
+      riskLevel: result.creObservations?.riskLevel,
+    };
+    ContractStorage.updateContract(with0x, {
+      fullAnalysis: result,
+      latestScan: latestScanFromAnalysis,
+      riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
+      status: result.creObservations?.riskLevel || "LOW",
+      riskScore: result.creObservations?.riskScore,
+      metrics: result.creObservations?.metrics ? { ...data?.metrics, ...result.creObservations.metrics } : undefined,
+    });
+    setData((prev: any) => (prev ? { ...prev, fullAnalysis: result, latestScan: latestScanFromAnalysis } : prev));
+    setAnalyzeResult(result);
+  };
+
+  const runAnalysisStream = async (userContext?: Record<string, string>) => {
+    if (!data?.address) return;
+    const callbacks = {
+      onNarrative(text: string) {
+        setAnalysisLogLines((prev) => [...prev, text]);
+      },
+      onResult(result: AnalyzeResult) {
+        applyAnalysisResult(result);
+        setAnalysisStage("complete");
+        setAnalysisLogLines((prev) =>
+          prev[prev.length - 1] === "Done. Analysis saved." ? prev : [...prev, "Done. Analysis saved."]
+        );
+        toast.success("Full analysis complete", {
+          description: "Analysis saved. It will persist until you run another.",
+        });
+        setTimeout(() => setAnalysisModalOpen(false), 2200);
+        setAnalyzeLoading(false);
+      },
+      onError(message: string) {
+        setAnalysisError(message);
+        setAnalysisStage("error");
+        setAnalysisLogLines((prev) => [...prev.filter((l) => !l.startsWith("Error:")), `Error: ${message}`]);
+        toast.error("Analysis failed", { description: message });
+        setTimeout(() => setAnalysisModalOpen(false), 3000);
+        setAnalyzeLoading(false);
+      },
+      onNeedMoreInfo(questions: NeedMoreInfoQuestion[], message?: string) {
+        setAnalysisNeedMoreInfo({ questions, message });
+        setAnalysisLogLines((prev) => [...prev, "I need a bit more information to give you an accurate result."]);
+        setAnalyzeLoading(false);
+      },
+    };
+    try {
+      await runAnalyzeStream(data.address, networkFromContract, callbacks, userContext);
+    } catch (err: any) {
+      const msg = err?.message || "Analysis failed";
+      setAnalysisError(msg);
+      setAnalysisStage("error");
+      setAnalysisLogLines((prev) => [...prev.filter((l) => !l.startsWith("Error:")), `Error: ${msg}`]);
+      toast.error("Analysis failed", { description: msg });
+      setTimeout(() => setAnalysisModalOpen(false), 3000);
+      setAnalyzeLoading(false);
+    }
+  };
+
   const handleFullAnalysis = async () => {
     if (!data?.address) return;
     setAnalyzeLoading(true);
     setAnalyzeResult(null);
-    try {
-      const result = await runAnalyze(data.address, networkFromContract);
-      setAnalyzeResult(result);
+    setAnalysisError(null);
+    setAnalysisStage("discovering");
+    setAnalysisNeedMoreInfo(null);
+    setNeedMoreInfoFormValues({});
+    setAnalysisLogLines(["Starting full analysis…"]);
+    setAnalysisModalOpen(true);
+    await runAnalysisStream();
+  };
 
-      const addr = (data.address || "").toLowerCase().trim();
-      const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
-      const f = result.finalAnalysis;
-      const latestScanFromAnalysis = {
-        reasoning: f?.summary ?? result.creObservations?.latestScan?.reasoning,
-        cause: f?.rootCause,
-        consequences: f?.potentialImpact,
-        estimatedImpact: f?.potentialImpact,
-        mitigationStrategy: f?.recommendations?.length
-          ? f.recommendations.join("\n\n")
-          : undefined,
-        nextSteps: f?.nextSteps,
-        suggestedActions: f?.suggestedActions,
-        affectedMetrics: result.creObservations?.metrics ? Object.keys(result.creObservations.metrics) : undefined,
-        riskLevel: result.creObservations?.riskLevel,
-      };
-      ContractStorage.updateContract(with0x, {
-        fullAnalysis: result,
-        latestScan: latestScanFromAnalysis,
-        riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
-        status: result.creObservations?.riskLevel || "LOW",
-        riskScore: result.creObservations?.riskScore,
-        metrics: result.creObservations?.metrics ? { ...data.metrics, ...result.creObservations.metrics } : undefined,
-      });
-      setData((prev: any) => prev ? { ...prev, fullAnalysis: result, latestScan: latestScanFromAnalysis } : prev);
-
-      toast.success("Full analysis complete", { description: "Analysis saved. It will persist until you run another." });
-    } catch (err: any) {
-      const msg = err?.message || "Analysis failed";
-      toast.error("Analysis failed", { description: msg });
-    } finally {
-      setAnalyzeLoading(false);
-    }
+  const handleNeedMoreInfoSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const userContext: Record<string, string> = {};
+    Object.entries(needMoreInfoFormValues).forEach(([id, value]) => {
+      if (value != null && String(value).trim() !== "") userContext[id] = String(value).trim();
+    });
+    setAnalysisNeedMoreInfo(null);
+    setNeedMoreInfoFormValues({});
+    setAnalysisLogLines((prev) => [...prev, "Using your answers, running analysis again…"]);
+    setAnalyzeLoading(true);
+    runAnalysisStream(userContext);
   };
 
   if (loading) {
@@ -348,7 +423,113 @@ export default function ContractDetailPage({
   };
 
   return (
-    <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
+    <>
+      {/* Full-screen Full Analysis progress modal — streaming log style */}
+      <AnimatePresence>
+        {analysisModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-xl"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-emerald-500/5" />
+            <div className="relative z-10 w-full max-w-2xl mx-4">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="rounded-[2rem] border border-border/50 bg-card/95 shadow-2xl shadow-primary/10 overflow-hidden"
+              >
+                <div className="px-8 pt-8 pb-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary">
+                      <Sparkles className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black tracking-tight text-foreground">Full Analysis</h2>
+                      <p className="text-xs text-muted-foreground font-medium">AI is analyzing your contract — here’s what’s happening</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Streaming log — like generative AI output */}
+                <div className="px-8 pb-8">
+                  <div className="rounded-2xl border border-border/50 bg-black/40 font-mono text-sm text-foreground/90 overflow-hidden">
+                    <div
+                      ref={analysisLogRef}
+                      className="p-4 min-h-[280px] max-h-[50vh] overflow-y-auto flex flex-col gap-0.5"
+                    >
+                      {analysisLogLines.map((line, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, x: -4 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className={cn(
+                            "leading-relaxed",
+                            line.startsWith("Error:") && "text-rose-500 font-semibold",
+                            line.startsWith("Done.") && "text-emerald-500 dark:text-emerald-400 font-semibold"
+                          )}
+                        >
+                          <span className="text-muted-foreground/70 select-none mr-2">$</span>
+                          {line}
+                        </motion.div>
+                      ))}
+                      {analysisModalOpen && analysisStage !== "complete" && analysisStage !== "error" && !analysisNeedMoreInfo && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="flex items-center gap-1 leading-relaxed text-primary"
+                        >
+                          <span className="text-muted-foreground/70 select-none mr-2">$</span>
+                          <span className="inline-block w-2 h-4 bg-primary animate-pulse" />
+                        </motion.div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {analysisNeedMoreInfo && (
+                  <div className="px-8 pb-6">
+                    <form onSubmit={handleNeedMoreInfoSubmit} className="rounded-2xl border border-primary/30 bg-primary/5 p-4 space-y-4">
+                      {analysisNeedMoreInfo.message && (
+                        <p className="text-sm font-medium text-foreground">{analysisNeedMoreInfo.message}</p>
+                      )}
+                      {analysisNeedMoreInfo.questions.map((q) => (
+                        <div key={q.id} className="space-y-1.5">
+                          <Label htmlFor={q.id} className="text-xs font-semibold text-muted-foreground">
+                            {q.label}
+                          </Label>
+                          <Input
+                            id={q.id}
+                            type="text"
+                            placeholder={q.placeholder}
+                            value={needMoreInfoFormValues[q.id] ?? ""}
+                            onChange={(e) =>
+                              setNeedMoreInfoFormValues((prev) => ({ ...prev, [q.id]: e.target.value }))
+                            }
+                            className="rounded-xl bg-background/80 border-border font-normal"
+                          />
+                        </div>
+                      ))}
+                      <Button type="submit" className="w-full rounded-xl font-bold">
+                        Continue analysis
+                      </Button>
+                    </form>
+                  </div>
+                )}
+                {analysisStage === "complete" && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-8 pb-8 pt-0">
+                    <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Closing shortly…</p>
+                  </motion.div>
+                )}
+              </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
       {/* Header & Breadcrumb */}
       <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <motion.div
@@ -1035,5 +1216,6 @@ export default function ContractDetailPage({
         </div>
       </div>
     </div>
+    </>
   );
 }

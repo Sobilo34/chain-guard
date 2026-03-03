@@ -43,6 +43,8 @@ export type DiscoveryLike = {
   abi?: object[];
   sourceSummary?: string;
   explorerUrl?: string;
+  /** User-provided answers when context was insufficient (e.g. from needMoreInfo form) */
+  userProvided?: Record<string, string>;
 };
 
 export type SuggestedRequestLike = {
@@ -106,6 +108,7 @@ export async function buildCREConfigFromDiscovery(
     dataFeedsDetected: discovery.dataFeedsDetected,
     ...(discovery.abi && { abiSummary: `ABI with ${discovery.abi.length} items (functions/events)` }),
     ...(discovery.sourceSummary && { sourceSummary: discovery.sourceSummary }),
+    ...(discovery.userProvided && Object.keys(discovery.userProvided).length > 0 && { userProvided: discovery.userProvided }),
   };
   const contextStr = JSON.stringify(contractContext, null, 2);
 
