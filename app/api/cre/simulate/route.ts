@@ -41,7 +41,35 @@ export async function POST(req: NextRequest) {
                 alertChannels: ["email"] as const,
                 priceFeeds: analyzeContract.priceFeeds?.length ? analyzeContract.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419", decimals: 8 }],
             }]
-            : defaultContracts.map((c) => ({ ...c }));
+            : (() => {
+                const norm = (addr: string) => (addr || "").toLowerCase().startsWith("0x") ? (addr || "").toLowerCase() : `0x${(addr || "").toLowerCase()}`;
+                const toContract = (c: any) => ({
+                    address: norm(c.address || ""),
+                    name: c.name || "Unknown",
+                    chainSelectorName: c.chainSelectorName || "ethereum-mainnet",
+                    riskThresholds: c.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
+                    alertChannels: Array.isArray(c.alertChannels) && c.alertChannels.length > 0 ? c.alertChannels : ["email"],
+                    priceFeeds: Array.isArray(c.priceFeeds) ? c.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Dd9Bbd43714FE2740F5E3616155c5b8419", decimals: 8 }],
+                });
+                if (!fs.existsSync(CONFIG_PATH)) return defaultContracts.map((c) => ({ ...c }));
+                try {
+                    const existing = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+                    const list = existing.monitoredContracts;
+                    if (!Array.isArray(list) || list.length === 0) return defaultContracts.map((c) => ({ ...c }));
+                    const fromConfig = list.map((c: any) => toContract(c));
+                    const configAddrs = new Set(fromConfig.map((c: any) => c.address));
+                    defaultContracts.forEach((d) => {
+                        if (!configAddrs.has(norm(d.address))) {
+                            fromConfig.push({ ...d });
+                            configAddrs.add(norm(d.address));
+                        }
+                    });
+                    return fromConfig;
+                } catch (e) {
+                    console.error("Failed to parse existing config, using defaults", e);
+                    return defaultContracts.map((c) => ({ ...c }));
+                }
+            })();
 
         // 1. Sync config.json with monitored contracts (or single contract for analyze)
         let currentConfig: Record<string, unknown> = {
@@ -50,7 +78,7 @@ export async function POST(req: NextRequest) {
             monitoredContracts: contractsToUse,
             gasLimit: "1000000",
             verboseLogging: true,
-            maxContractsPerRun: Math.max(1, contractsToUse.length),
+            maxContractsPerRun: Math.max(1, Math.min(contractsToUse.length, 50)),
             aiTimeoutMs: 30000,
         };
 

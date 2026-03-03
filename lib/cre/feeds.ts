@@ -19,6 +19,7 @@ export function getWellKnownFeeds(network: string): Record<string, string> {
       USDT: "0x3E7d1eA13978982C58110906476e3FFf87208e59",
       DAI: "0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee5",
       ETH: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+      SNX: "0xDC3EA94CD0AC27d9A86C180091e7f78C683d3699",
     };
   }
   return {};
