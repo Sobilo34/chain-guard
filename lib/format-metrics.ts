@@ -35,6 +35,24 @@ export function formatLiquidityPercent(pct: number | undefined | null): string {
   return `${Math.min(100, Math.max(0, Math.round(val)))}%`;
 }
 
+/**
+ * Format ISO sync timestamp for dashboard (human-readable date and time).
+ * e.g. "2026-02-28T21:23:07.818Z" → "Feb 28, 2026, 9:23 PM"
+ */
+export function formatSyncTime(iso: string | undefined | null): string {
+  if (!iso || typeof iso !== "string") return "—";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 /** Parse stored TVL string (e.g. "$1.2M", "$50.5k") back to number for aggregation */
 export function parseTvlToNumber(tvlStr: string | undefined): number {
   if (!tvlStr || typeof tvlStr !== "string") return 0;

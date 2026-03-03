@@ -46,7 +46,7 @@ import {
   type DashboardAlert,
   type DashboardContract,
 } from "@/lib/api";
-import { formatTvl } from "@/lib/format-metrics";
+import { formatTvl, formatSyncTime } from "@/lib/format-metrics";
 import { createPublicClient, http, parseAbi } from "viem";
 import { toast } from "@/components/ui/toast";
 
@@ -639,8 +639,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground tabular-nums">
-                Sync: {systemStatus.lastSync || "--"}
+              <span className="text-xs font-medium text-muted-foreground tabular-nums" title={systemStatus.lastSync || undefined}>
+                Sync: {formatSyncTime(systemStatus.lastSync)}
               </span>
             </div>
           </div>

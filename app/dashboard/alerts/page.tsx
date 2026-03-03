@@ -41,6 +41,7 @@ import {
   ArrowUpRight,
   Zap,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
 import * as framerMotion from "framer-motion";
 import {
@@ -48,6 +49,7 @@ import {
   AlertPayload,
   acknowledgeAlert,
   resolveAlert,
+  deleteAlert as deleteAlertApi,
 } from "@/lib/api";
 
 const motion =
@@ -191,6 +193,26 @@ export default function AlertsPage() {
       setSelectedAlert(null);
     } catch (err) {
       console.error("Failed to resolve alert", err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      setActionLoading(true);
+      const result = await deleteAlertApi(id);
+      if (result.success) {
+        setData((prev: any) => ({
+          ...prev,
+          alerts: prev.alerts.filter((a: any) => a.id !== id),
+          total: Math.max(0, (prev.total ?? prev.alerts.length) - 1),
+        }));
+        if (selectedAlert?.id === id) setSelectedAlert(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete alert", err);
     } finally {
       setActionLoading(false);
     }
@@ -448,12 +470,24 @@ export default function AlertsPage() {
                       >
                         <AlertTriangle className="h-6 w-6" />
                       </div>
-                      <div className="text-right">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
-                          <Clock className="h-3 w-3" />
-                          {alert.timestamp}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 shrink-0"
+                          onClick={(e) => handleDelete(alert.id, e)}
+                          disabled={actionLoading}
+                          title="Delete alert"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <div className="text-right">
+                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                            <Clock className="h-3 w-3" />
+                            {alert.timestamp}
+                          </div>
+                          {getSeverityBadge(alert.severity)}
                         </div>
-                        {getSeverityBadge(alert.severity)}
                       </div>
                     </div>
 
@@ -548,13 +582,29 @@ export default function AlertsPage() {
                     <TableCell>{getSeverityBadge(alert.severity)}</TableCell>
                     <TableCell>{getStatusBadge(alert.status)}</TableCell>
                     <TableCell className="pr-8 text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9 rounded-xl transition-all group-hover:bg-primary/20 group-hover:text-primary"
-                      >
-                        <ArrowUpRight className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-xl text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(alert.id, e);
+                          }}
+                          disabled={actionLoading}
+                          title="Delete alert"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 rounded-xl transition-all group-hover:bg-primary/20 group-hover:text-primary"
+                          onClick={() => setSelectedAlert(alert)}
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -780,6 +830,15 @@ export default function AlertsPage() {
                     onClick={() => handleResolve(selectedAlert.id)}
                   >
                     Resolve
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="h-11 rounded-xl font-bold text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
+                    disabled={actionLoading}
+                    onClick={() => selectedAlert && handleDelete(selectedAlert.id)}
+                  >
+                    <Trash2 className="mr-1.5 h-4 w-4" />
+                    Delete
                   </Button>
                   <Button
                     variant="ghost"

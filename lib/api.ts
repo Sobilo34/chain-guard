@@ -511,6 +511,11 @@ export async function resolveAlert(alertId: string) {
   return { success: true };
 }
 
+export async function deleteAlert(alertId: string) {
+  const removed = ContractStorage.deleteAlert(alertId);
+  return { success: removed };
+}
+
 export async function triggerTestEmail() {
   return { success: true, message: "Test alert simulated locally." };
 }

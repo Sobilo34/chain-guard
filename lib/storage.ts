@@ -209,6 +209,17 @@ export class ContractStorage {
     }
 
     /**
+     * Delete an alert by id
+     */
+    static deleteAlert(alertId: string): boolean {
+        const alerts = this.getAlerts();
+        const filtered = alerts.filter(a => a.id !== alertId);
+        if (filtered.length === alerts.length) return false;
+        this.saveAlerts(filtered);
+        return true;
+    }
+
+    /**
      * Get dashboard overview
      */
     static getOverview(): OverviewPayload {
