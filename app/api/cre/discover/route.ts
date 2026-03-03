@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http, parseAbi, Address, formatUnits } from "viem";
 import { mainnet, arbitrum, optimism, base, polygon } from "viem/chains";
 import { getWellKnownFeeds } from "@/lib/cre/feeds";
+import { fetchContractAbi, fetchContractSource, getExplorerUrl } from "@/lib/cre/explorer-api";
+import { buildCREConfigFromDiscovery } from "@/lib/cre/build-config";
 
 // Configuration – mainnet only
 const EIP1967_IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
@@ -98,7 +100,14 @@ export async function POST(req: NextRequest) {
             } catch (e) { }
         }
 
-        // 5. AI Insights if OpenRouter API key available
+        // 5. Enhanced discovery: ABI + verified source (Etherscan-style)
+        const [abiResult, sourceResult] = await Promise.all([
+            fetchContractAbi(address, network).catch(() => undefined),
+            fetchContractSource(address, network).catch(() => undefined),
+        ]);
+        const explorerUrl = getExplorerUrl(network, address);
+
+        // 6. AI Insights if OpenRouter API key available
         const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
         let name = "Discovered Contract";
         let suggestions = [];
@@ -149,7 +158,7 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // 6. Map detected tokens + native balance to data feeds (Chainlink or other). All detected feeds are used by CRE for alerts.
+        // 7. Map detected tokens + native balance to data feeds (Chainlink or other). All detected feeds are used by CRE for alerts.
         const wellKnownFeeds = getWellKnownFeeds(network);
         const priceFeeds: Array<{ pairName: string; feedAddress: string; decimals: number }> = [];
 
@@ -179,11 +188,23 @@ export async function POST(req: NextRequest) {
             tokens,
             nativeBalance,
             dataFeedsDetected: priceFeeds.map((f) => ({ pairName: f.pairName, feedAddress: f.feedAddress })),
+            ...(abiResult && { abi: abiResult }),
+            ...(sourceResult && { sourceSummary: sourceResult.sourceSummary }),
+            ...(explorerUrl && { explorerUrl }),
         };
 
         const hasStablecoin = priceFeeds.some((f) => ["USDC/USD", "USDT/USD", "DAI/USD"].includes(f.pairName));
 
-        const suggestedRequest = {
+        let suggestedRequest: {
+            address: string;
+            name: string;
+            protocol: string;
+            chain: string;
+            chainSelectorName: string;
+            chainName: string;
+            priceFeeds: Array<{ pairName: string; feedAddress: string; decimals?: number }>;
+            riskThresholds: Record<string, number>;
+        } = {
             address,
             name,
             protocol: type === "Normal" ? "Generic" : type,
@@ -198,6 +219,22 @@ export async function POST(req: NextRequest) {
                 collateralRatioMin: 1.5,
             },
         };
+
+        if (process.env.OPENROUTER_API_KEY) {
+            try {
+                const creEntry = await buildCREConfigFromDiscovery(discovery, suggestedRequest, network);
+                const entry = "creEntry" in creEntry ? creEntry.creEntry : creEntry;
+                suggestedRequest = {
+                    ...suggestedRequest,
+                    name: entry.name,
+                    chainSelectorName: entry.chainSelectorName,
+                    priceFeeds: entry.priceFeeds,
+                    riskThresholds: entry.riskThresholds,
+                };
+            } catch (e) {
+                console.error("AI config builder in discover failed, using heuristic suggestedRequest", e);
+            }
+        }
 
         const preliminaryAssessment = {
             riskLevel: "LOW",

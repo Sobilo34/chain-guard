@@ -65,6 +65,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { getContractDetail, runAnalyze, type AnalyzeResult } from "@/lib/api";
+import { ContractStorage } from "@/lib/storage";
 import { useEffect, useState } from "react";
 import { toast } from "@/components/ui/toast";
 
@@ -105,6 +106,9 @@ export default function ContractDetailPage({
         const detail = await getContractDetail(contractAddress);
         setData(detail);
         setError(null);
+        if (detail?.fullAnalysis) {
+          setAnalyzeResult(detail.fullAnalysis);
+        }
       } catch (err: any) {
         console.error("Failed to fetch contract detail", err);
         const message =
@@ -140,7 +144,33 @@ export default function ContractDetailPage({
     try {
       const result = await runAnalyze(data.address, networkFromContract);
       setAnalyzeResult(result);
-      toast.success("Full analysis complete", { description: "Pre-CRE, CRE, and post-CRE analysis ready." });
+
+      const addr = (data.address || "").toLowerCase().trim();
+      const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+      const f = result.finalAnalysis;
+      const latestScanFromAnalysis = {
+        reasoning: f?.summary ?? result.creObservations?.latestScan?.reasoning,
+        cause: f?.rootCause,
+        consequences: f?.potentialImpact,
+        estimatedImpact: f?.potentialImpact,
+        mitigationStrategy: f?.recommendations?.length
+          ? f.recommendations.join("\n\n")
+          : undefined,
+        nextSteps: f?.nextSteps,
+        suggestedActions: f?.suggestedActions,
+        affectedMetrics: result.creObservations?.metrics ? Object.keys(result.creObservations.metrics) : undefined,
+        riskLevel: result.creObservations?.riskLevel,
+      };
+      ContractStorage.updateContract(with0x, {
+        fullAnalysis: result,
+        latestScan: latestScanFromAnalysis,
+        riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
+        status: result.creObservations?.riskLevel || "LOW",
+        riskScore: result.creObservations?.riskScore,
+      });
+      setData((prev: any) => prev ? { ...prev, fullAnalysis: result, latestScan: latestScanFromAnalysis } : prev);
+
+      toast.success("Full analysis complete", { description: "Analysis saved. It will persist until you run another." });
     } catch (err: any) {
       const msg = err?.message || "Analysis failed";
       toast.error("Analysis failed", { description: msg });
@@ -581,8 +611,18 @@ export default function ContractDetailPage({
             </CardContent>
           </Card>
 
-          {/* Detailed AI Risk Analysis */}
-          {data.latestScan && (
+          {/* Detailed AI Risk Intelligence (from persisted Full Analysis or latestScan from Force Scan) */}
+          {(() => {
+            const fa = data.fullAnalysis?.finalAnalysis;
+            const scan = data.latestScan;
+            const reasoning = fa?.summary ?? scan?.reasoning;
+            const cause = fa?.rootCause ?? scan?.cause;
+            const consequences = fa?.potentialImpact ?? scan?.consequences;
+            const mitigationStrategy = scan?.mitigationStrategy ?? (fa?.recommendations?.length ? fa.recommendations.join("\n\n") : undefined);
+            const nextSteps = fa?.nextSteps ?? scan?.nextSteps;
+            const suggestedActions = fa?.suggestedActions ?? scan?.suggestedActions;
+            if (!data.fullAnalysis && !data.latestScan) return null;
+            return (
             <div className="space-y-6">
               <h3 className="flex items-center gap-2 text-lg font-black tracking-tight text-foreground px-2">
                 <Zap className="h-5 w-5 text-primary fill-primary" />
@@ -595,7 +635,7 @@ export default function ContractDetailPage({
                   <div className="space-y-3">
                     <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
                     <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10 whitespace-pre-wrap">
-                      {data.latestScan.reasoning}
+                      {reasoning || "Run Full Analysis or Force Scan for an AI summary."}
                     </p>
                   </div>
 
@@ -607,7 +647,7 @@ export default function ContractDetailPage({
                          Root Cause Analysis
                       </h5>
                       <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02] whitespace-pre-wrap">
-                        {data.latestScan.cause || "No root cause identified."}
+                        {cause || "Run Full Analysis or Force Scan (with post-CRE AI) for root cause analysis."}
                       </p>
                     </div>
                     <div className="space-y-3">
@@ -616,30 +656,30 @@ export default function ContractDetailPage({
                          Potential Impact
                       </h5>
                       <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
-                        {data.latestScan.consequences || "Impact assessment pending."}
+                        {consequences || "Run Full Analysis or Force Scan for impact assessment."}
                       </p>
                     </div>
                   </div>
 
                   {/* Estimated Impact (financial/operational) */}
-                  {data.latestScan.estimatedImpact && (
+                  {(scan?.estimatedImpact ?? consequences) && (
                     <div className="space-y-3">
                       <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
                         <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                         Estimated Impact (Financial & Operational)
                       </h5>
                       <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02] whitespace-pre-wrap">
-                        {data.latestScan.estimatedImpact}
+                        {scan?.estimatedImpact ?? consequences}
                       </p>
                     </div>
                   )}
 
                   {/* Affected Metrics */}
-                  {data.latestScan.affectedMetrics && data.latestScan.affectedMetrics.length > 0 && (
+                  {scan?.affectedMetrics && scan.affectedMetrics.length > 0 && (
                     <div className="space-y-3">
                       <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Affected / Reviewed Metrics</h5>
                       <div className="flex flex-wrap gap-2">
-                        {data.latestScan.affectedMetrics.map((m: string, i: number) => (
+                        {scan.affectedMetrics.map((m: string, i: number) => (
                           <Badge key={i} variant="secondary" className="rounded-full text-[10px] font-bold uppercase">
                             {m}
                           </Badge>
@@ -652,21 +692,21 @@ export default function ContractDetailPage({
                   <div className="space-y-3 pt-2 border-t border-primary/10">
                     <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
                       <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      {["high", "critical"].includes((data.latestScan.riskLevel || "").toLowerCase())
+                      {["high", "critical"].includes((scan?.riskLevel || data.riskLevel || "").toLowerCase())
                         ? "Technical Mitigation Strategy"
                         : "Recommendations to Safeguard This Contract"}
                     </h5>
                     <div className="text-xs font-semibold leading-relaxed text-foreground/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] whitespace-pre-wrap">
-                      {data.latestScan.mitigationStrategy || "No specific strategy in this scan. Re-run Force Scan for updated recommendations, or ensure thresholds and monitoring are configured."}
+                      {mitigationStrategy || "Run Full Analysis or Force Scan (with post-CRE AI) for recommendations."}
                     </div>
                   </div>
 
                   {/* Immediate Action Items */}
-                  {data.latestScan.nextSteps && data.latestScan.nextSteps.length > 0 && (
+                  {nextSteps && nextSteps.length > 0 && (
                      <div className="space-y-4 pt-4 border-t border-primary/10">
                        <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Immediate Action Items</h5>
                        <div className="space-y-2">
-                         {data.latestScan.nextSteps.map((step: string, i: number) => (
+                         {nextSteps.map((step: string, i: number) => (
                            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
                              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                                {i + 1}
@@ -678,16 +718,16 @@ export default function ContractDetailPage({
                      </div>
                   )}
 
-                  {/* Long-term Suggested Actions (safeguard tips when low risk) */}
-                  {data.latestScan.suggestedActions && data.latestScan.suggestedActions.length > 0 && (
+                  {/* Long-term Suggested Actions (safeguard tips) */}
+                  {suggestedActions && suggestedActions.length > 0 && (
                     <div className="space-y-4 pt-4 border-t border-primary/10">
                       <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">
-                        {["high", "critical"].includes((data.latestScan.riskLevel || "").toLowerCase())
+                        {["high", "critical"].includes((scan?.riskLevel || data.riskLevel || "").toLowerCase())
                           ? "Long-term Actions"
                           : "Tips to Safeguard for Future Occurrence"}
                       </h5>
                       <ul className="space-y-2">
-                        {data.latestScan.suggestedActions.map((action: string, i: number) => (
+                        {suggestedActions.map((action: string, i: number) => (
                           <li key={i} className="flex items-start gap-2 text-xs font-semibold text-foreground/85">
                             <ChevronRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
                             <span>{action}</span>
@@ -699,7 +739,8 @@ export default function ContractDetailPage({
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* AI Strategy Insights */}
           <div className="space-y-6">

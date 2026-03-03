@@ -12,6 +12,16 @@ export type ContractScanResult = {
   nextSteps?: string[];
   suggestedActions?: string[];
   affectedMetrics?: string[];
+  /** From optional post-CRE AI (Force Scan with runPostCREAi) */
+  comprehensiveSummary?: {
+    summary?: string;
+    keyFindings?: string[];
+    recommendations?: string[];
+    rootCause?: string;
+    potentialImpact?: string;
+    nextSteps?: string[];
+    suggestedActions?: string[];
+  };
   riskType?: string;
   riskLevel?: string;
 };
@@ -30,6 +40,15 @@ export type SentinelAssessment = {
     [key: string]: any;
   };
   latestScan?: ContractScanResult;
+  comprehensiveSummary?: {
+    summary?: string;
+    keyFindings?: string[];
+    recommendations?: string[];
+    rootCause?: string;
+    potentialImpact?: string;
+    nextSteps?: string[];
+    suggestedActions?: string[];
+  };
 };
 
 export type DashboardContract = {
@@ -59,6 +78,8 @@ export type DashboardContract = {
   };
   priceFeeds?: Array<{ pairName: string; feedAddress: string; decimals: number }>;
   riskThresholds?: Record<string, any>;
+  /** Persisted Full Analysis (Pre-CRE + CRE + Post-CRE); shown until next analysis runs. */
+  fullAnalysis?: AnalyzeResult;
 };
 
 export type DashboardAlert = {
@@ -181,7 +202,16 @@ export type AnalyzeResult = {
   contractContext: any;
   initialAnalysis: { summary?: string; keyRisks?: string[]; recommendations?: string[] };
   creObservations: any;
-  finalAnalysis: { summary?: string; keyFindings?: string[]; comparisonWithPreCRE?: string; recommendations?: string[] };
+  finalAnalysis: {
+    summary?: string;
+    keyFindings?: string[];
+    comparisonWithPreCRE?: string;
+    recommendations?: string[];
+    rootCause?: string;
+    potentialImpact?: string;
+    nextSteps?: string[];
+    suggestedActions?: string[];
+  };
   aiChosenConfig?: { priceFeedPairs?: string[]; riskThresholds?: any; resolvedPriceFeeds?: any[] };
 };
 
@@ -192,17 +222,57 @@ export async function runAnalyze(address: string, network: string): Promise<Anal
   });
 }
 
+/** Payload for a one-off CRE run (e.g. initial scan after add). Same shape as suggestedRequest from discover. */
+export type InitialScanPayload = {
+  address: string;
+  name?: string;
+  chainSelectorName?: string;
+  riskThresholds?: Record<string, number>;
+  priceFeeds?: Array<{ pairName: string; feedAddress: string; decimals?: number }>;
+};
+
+/** Run CRE for a single contract and update that contract in storage with the assessment. Used after add contract. */
+export async function runInitialScanForContract(payload: InitialScanPayload): Promise<any | null> {
+  const analyzeContract = {
+    address: payload.address,
+    name: payload.name || "Discovered Contract",
+    chainSelectorName: payload.chainSelectorName || "ethereum-mainnet",
+    riskThresholds: payload.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
+    priceFeeds: (payload.priceFeeds?.length ? payload.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Dd9Bbd43714FE2740F5E3616155c5b8419", decimals: 8 }]).map((f) => ({ pairName: f.pairName, feedAddress: f.feedAddress, decimals: f.decimals ?? 8 })),
+  };
+  const response = await fetchJson<{ success: boolean; assessments: any[] }>(`${API_BASE_URL}/simulate`, {
+    method: "POST",
+    body: JSON.stringify({ analyzeContract }),
+  });
+  const assessment = response.assessments?.[0];
+  if (response.success && assessment) {
+    const addr = (assessment.contractAddress || payload.address).toLowerCase().trim();
+    const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+    ContractStorage.updateContract(with0x, {
+      riskLevel: (assessment.riskLevel || "LOW").toLowerCase() as any,
+      status: assessment.riskLevel || "LOW",
+      riskScore: assessment.riskScore,
+      latestScan: assessment.latestScan || assessment,
+      metrics: assessment.metrics,
+    });
+    return assessment;
+  }
+  return null;
+}
+
 export async function runGeminiScan(payload?: {
   contractAddress?: string;
   chainSelectorName?: string;
   contractName?: string;
+  /** When true, run post-CRE AI for each assessment (adds comprehensiveSummary; can slow response). */
+  runPostCREAi?: boolean;
 }) {
   const contracts = ContractStorage.getContracts();
   const response = await fetchJson<{ success: boolean; assessments: any[]; rawOutput?: string; error?: string }>(
     `${API_BASE_URL}/simulate`,
     {
       method: "POST",
-      body: JSON.stringify({ contracts }),
+      body: JSON.stringify({ contracts, runPostCREAi: payload?.runPostCREAi === true }),
     }
   );
 
@@ -216,11 +286,28 @@ export async function runGeminiScan(payload?: {
   if (response.success && assessments.length > 0) {
     assessments.forEach((assessment: SentinelAssessment) => {
       const address = normalizeAddr(assessment.contractAddress);
+      const cs = assessment.comprehensiveSummary;
+      const latestScan = assessment.latestScan || (assessment as unknown as ContractScanResult);
+      const withSummary: ContractScanResult = cs
+        ? {
+            ...latestScan,
+            comprehensiveSummary: cs,
+            reasoning: cs.summary ?? latestScan.reasoning,
+            cause: cs.rootCause ?? latestScan.cause,
+            consequences: cs.potentialImpact ?? latestScan.consequences,
+            estimatedImpact: cs.potentialImpact ?? latestScan.estimatedImpact,
+            mitigationStrategy: cs.recommendations?.length
+              ? cs.recommendations.join("\n\n")
+              : latestScan.mitigationStrategy,
+            nextSteps: cs.nextSteps ?? latestScan.nextSteps,
+            suggestedActions: cs.suggestedActions ?? latestScan.suggestedActions,
+          }
+        : latestScan;
       const updated = ContractStorage.updateContract(address, {
         riskLevel: assessment.riskLevel.toLowerCase() as any,
         status: assessment.riskLevel,
         riskScore: assessment.riskScore,
-        latestScan: assessment.latestScan || (assessment as unknown as ContractScanResult),
+        latestScan: withSummary,
         metrics: assessment.metrics,
       });
       if (!updated) {

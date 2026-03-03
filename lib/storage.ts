@@ -4,17 +4,20 @@
  */
 
 import { DashboardContract, DashboardAlert, OverviewPayload } from "./api";
-import { getDefaultContractsDashboard } from "./default-contracts";
 
 const STORAGE_KEYS = {
     CONTRACTS: "chainguard_contracts",
     ALERTS: "chainguard_alerts",
     SYSTEM_SYNC: "chainguard_system_sync",
+    /** One-time: clear old/default contracts so only user-added contracts are shown. */
+    CONTRACTS_RESET_DONE: "chainguard_contracts_reset_v1",
 };
 
 export class ContractStorage {
     /**
-     * Get all monitored contracts from localStorage
+     * Get all monitored contracts from localStorage.
+     * Only user-added contracts are returned; no hardcoded/seed contracts are merged.
+     * Monitored Assets (Overview and Registry) use this as the single source of truth.
      */
     static getContracts(): DashboardContract[] {
         if (typeof window === "undefined") return [];
@@ -26,38 +29,34 @@ export class ContractStorage {
             return clean.startsWith("0x") ? clean : `0x${clean}`;
         };
 
-        // Same defaults as CRE config (lib/default-contracts.ts)
-        const seedContracts: DashboardContract[] = getDefaultContractsDashboard() as DashboardContract[];
+        // One-time reset: clear any previously stored/default contracts so only user-added contracts appear from now on.
+        const resetDone = localStorage.getItem(STORAGE_KEYS.CONTRACTS_RESET_DONE);
+        if (!resetDone && stored) {
+            try {
+                const parsed = JSON.parse(stored);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    this.saveContracts([]);
+                    localStorage.setItem(STORAGE_KEYS.CONTRACTS_RESET_DONE, "1");
+                    return [];
+                }
+            } catch {
+                // ignore
+            }
+            // Mark reset done even when stored was empty so we don't re-enter
+            localStorage.setItem(STORAGE_KEYS.CONTRACTS_RESET_DONE, "1");
+        }
 
         let contracts: DashboardContract[] = [];
         if (stored) {
             try {
                 contracts = JSON.parse(stored);
-                // Basic migration: ensure all existing contract addresses are normalized
                 contracts = contracts.map(c => ({ ...c, address: normalizeAddress(c.address) }));
             } catch (e) {
                 console.error("Failed to parse contracts", e);
             }
         } else {
-            this.saveContracts(seedContracts);
-            return seedContracts;
-        }
-
-        // Ensure defaults are present but DON'T overwrite metadata
-        let changed = false;
-        seedContracts.forEach(seed => {
-            const seedAddr = normalizeAddress(seed.address);
-            const existingIndex = contracts.findIndex(c => normalizeAddress(c.address) === seedAddr);
-
-            if (existingIndex === -1) {
-                contracts.push(seed);
-                changed = true;
-            }
-            // We NO LONGER overwrite Name/ID here to prevent wiping discovery data
-        });
-
-        if (changed) {
-            this.saveContracts(contracts);
+            this.saveContracts([]);
+            return [];
         }
 
         return contracts;

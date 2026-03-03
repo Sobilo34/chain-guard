@@ -41,6 +41,7 @@ import {
   getOverview,
   addContract,
   discoverContract,
+  runInitialScanForContract,
   runGeminiScan,
   type DashboardAlert,
   type DashboardContract,
@@ -309,19 +310,16 @@ export default function DashboardPage() {
   }, []);
 
   const handleQuickScan = async () => {
+    if (liveContracts.length === 0) {
+      toast.warning("No contracts to scan", {
+        description: "Add contracts (address + network) in the Registry, then run Force Scan.",
+      });
+      return;
+    }
     setIsScanning(true);
     setScanMessage("Initializing CRE Simulator...");
     try {
-      const first = liveContracts[0];
-      const scanResponse = await runGeminiScan(
-        first
-          ? {
-              contractAddress: first.address,
-              chainSelectorName: first.chainSelectorName,
-              contractName: first.name,
-            }
-          : undefined,
-      );
+      const scanResponse = await runGeminiScan({ runPostCREAi: true });
 
       if (scanResponse.data.quotaExceeded) {
         setScanMessage(
@@ -455,12 +453,26 @@ export default function DashboardPage() {
       await addContract({
         ...suggestedRequest,
         initialAssessment: preliminaryAssessment,
-        // Ensure we pass the essential fields from our form or defaults
         alertChannels: ["email"],
         riskThresholds:
           suggestedRequest.riskThresholds ||
           getRiskThresholds(addForm.riskProfile),
       });
+
+      // Optional: one-off CRE run for initial risk assessment (non-blocking)
+      runInitialScanForContract({
+        address: suggestedRequest.address,
+        name: suggestedRequest.name,
+        chainSelectorName: suggestedRequest.chainSelectorName,
+        riskThresholds: suggestedRequest.riskThresholds,
+        priceFeeds: suggestedRequest.priceFeeds,
+      }).then((assessment) => {
+        if (assessment) {
+          getOverview().then((res) => {
+            if (res?.data?.contracts) setLiveContracts(res.data.contracts);
+          });
+        }
+      }).catch(() => {});
 
       // 3. Refresh overview
       const overviewResponse = await getOverview();
@@ -951,8 +963,8 @@ export default function DashboardPage() {
                   contract{liveContracts.length !== 1 ? "s" : ""} monitored
                 </p>
                 {liveContracts.length > 0 ? (
-                  <ul className="space-y-2">
-                    {liveContracts.slice(0, 4).map((contract) => (
+                  <ul className="space-y-2 max-h-[320px] overflow-y-auto">
+                    {liveContracts.map((contract) => (
                       <li key={contract.address}>
                         <Link
                           href={`/dashboard/contracts/${contract.id || contract.address}`}

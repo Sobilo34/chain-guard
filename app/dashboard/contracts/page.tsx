@@ -38,7 +38,7 @@ import {
   ShieldCheck,
   Globe,
 } from "lucide-react";
-import { getContracts, runGeminiScan, addContract, type DashboardContract } from "@/lib/api";
+import { getContracts, runGeminiScan, addContract, discoverContract, runInitialScanForContract, type DashboardContract } from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 
 const getRiskBadge = (level: string) => {
@@ -238,26 +238,50 @@ export default function ContractsPage() {
     }
 
     const chainConfig = getChainConfig();
-    const fallbackName = `${newContract.protocol} ${newContract.address.slice(0, 6)}...${newContract.address.slice(-4)}`;
+    const network = newContract.chain;
 
-    await addContract({
-      address: newContract.address,
-      chain: chainConfig.chainSelectorName,
-      chainSelectorName: chainConfig.chainSelectorName,
-      chainName: chainConfig.chainName,
-      rpcUrl: chainConfig.rpcUrl,
-      chainId: newContract.customChainId
-        ? Number(newContract.customChainId)
-        : undefined,
-      name: newContract.name || fallbackName,
-      protocol: newContract.protocol || "Normal",
-      priceFeeds: newContract.priceFeeds,
-      alertChannels: ["email"],
-    });
+    try {
+      const discoveryResult = await discoverContract(newContract.address.trim(), network);
+      const { suggestedRequest, preliminaryAssessment } = discoveryResult;
 
-    const refreshed = await getContracts();
-    if (refreshed.contracts) {
-      setContracts(refreshed.contracts);
+      await addContract({
+        ...suggestedRequest,
+        chain: suggestedRequest.chainSelectorName ?? chainConfig.chainSelectorName,
+        chainSelectorName: suggestedRequest.chainSelectorName ?? chainConfig.chainSelectorName,
+        chainName: suggestedRequest.chainName ?? chainConfig.chainName,
+        rpcUrl: chainConfig.rpcUrl,
+        chainId: newContract.customChainId ? Number(newContract.customChainId) : undefined,
+        name: suggestedRequest.name || newContract.name || "Discovered Contract",
+        protocol: suggestedRequest.protocol || newContract.protocol || "Normal",
+        priceFeeds: suggestedRequest.priceFeeds ?? [],
+        riskThresholds: suggestedRequest.riskThresholds,
+        alertChannels: ["email"],
+        initialAssessment: preliminaryAssessment,
+      });
+
+      const refreshed = await getContracts();
+      if (refreshed.contracts) {
+        setContracts(refreshed.contracts);
+      }
+      toast.success("Contract added", { description: `${suggestedRequest.name || "Contract"} is now monitored.` });
+
+      runInitialScanForContract({
+        address: suggestedRequest.address,
+        name: suggestedRequest.name,
+        chainSelectorName: suggestedRequest.chainSelectorName,
+        riskThresholds: suggestedRequest.riskThresholds,
+        priceFeeds: suggestedRequest.priceFeeds,
+      }).then((assessment) => {
+        if (assessment) {
+          getContracts().then((r) => { if (r.contracts) setContracts(r.contracts); });
+          toast.success("Initial scan complete", { description: `Risk: ${assessment.riskLevel || "LOW"}` });
+        }
+      }).catch(() => {});
+    } catch (err: any) {
+      console.error("Add contract failed", err);
+      const message = typeof err?.message === "string" ? err.message : String(err ?? "Discovery or add failed");
+      toast.error("Could not add contract", { description: message });
+      return;
     }
 
     setNewContract({
@@ -275,17 +299,38 @@ export default function ContractsPage() {
   };
 
   const handleGlobalScan = async () => {
+    if (contracts.length === 0) {
+      toast.error("No contracts to scan", {
+        description: "Add contracts (address + network) in the Registry first, then run Force Scan.",
+      });
+      return;
+    }
     try {
       setIsScanning(true);
-      await runGeminiScan();
-      toast.success("Global scan started", {
-        description: "System-wide scan initiated across all registered contracts.",
-      });
+      const scanResponse = await runGeminiScan({ runPostCREAi: true });
+      const count = scanResponse.assessmentsCount ?? 0;
+      if (scanResponse.success && count > 0) {
+        const refreshed = await getContracts();
+        if (refreshed.contracts) setContracts(refreshed.contracts);
+        toast.success("Force Scan complete", {
+          description: `${count} contract(s) updated with risk data and AI analysis.`,
+        });
+      } else if (scanResponse.success && count === 0) {
+        toast.warning("No results", {
+          description: "CRE completed but no assessments returned. Check API logs or try again.",
+        });
+      } else {
+        toast.success("Scan started", {
+          description: "Processing your monitored contracts.",
+        });
+        const refreshed = await getContracts();
+        if (refreshed.contracts) setContracts(refreshed.contracts);
+      }
     } catch (err: any) {
       console.error("Global scan failed", err);
       const message =
         typeof err?.message === "string" ? err.message : String(err || "Unknown error");
-      toast.error("Global scan failed", {
+      toast.error("Force Scan failed", {
         description: message,
       });
     } finally {

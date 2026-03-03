@@ -3,7 +3,8 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
-import { getDefaultContractsCRE } from "@/lib/default-contracts";
+import { buildCREConfigFromDiscovery, chainSelectorToNetwork } from "@/lib/cre/build-config";
+import { runPostCREAnalysis } from "@/lib/cre/post-cre-ai";
 
 const execAsync = promisify(exec);
 
@@ -21,55 +22,124 @@ type AnalyzeContract = {
     priceFeeds: Array<{ pairName: string; feedAddress: string; decimals: number }>;
 };
 
+/** Contract input from app (address + network required; rest optional from cache) */
+type ContractInput = {
+    address: string;
+    chain?: string;
+    chainSelectorName?: string;
+    name?: string;
+    priceFeeds?: Array<{ pairName: string; feedAddress: string; decimals?: number }>;
+    riskThresholds?: Record<string, number>;
+};
+
+function normAddr(addr: string): string {
+    const a = (addr || "").toLowerCase().trim();
+    return a.startsWith("0x") ? a : `0x${a}`;
+}
+
+function hasFullConfig(c: ContractInput): boolean {
+    return !!(c.address && c.chainSelectorName && Array.isArray(c.priceFeeds) && c.priceFeeds.length > 0 && c.riskThresholds && typeof c.riskThresholds === "object");
+}
+
+function toCREEntry(c: ContractInput): {
+    address: string;
+    name: string;
+    chainSelectorName: string;
+    riskThresholds: Record<string, number>;
+    alertChannels: readonly string[];
+    priceFeeds: Array<{ pairName: string; feedAddress: string; decimals: number }>;
+} {
+    const defaultFeeds = [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Dd9Bbd43714FE2740F5E3616155c5b8419", decimals: 8 }];
+    const feeds = Array.isArray(c.priceFeeds) && c.priceFeeds.length > 0
+        ? c.priceFeeds.map((f) => ({ pairName: f.pairName, feedAddress: f.feedAddress, decimals: typeof f.decimals === "number" ? f.decimals : 8 }))
+        : defaultFeeds;
+    return {
+        address: normAddr(c.address),
+        name: c.name || "Unknown",
+        chainSelectorName: c.chainSelectorName || "ethereum-mainnet",
+        riskThresholds: c.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
+        alertChannels: ["email"],
+        priceFeeds: feeds,
+    };
+}
+
 export async function POST(req: NextRequest) {
     try {
-        let analyzeContract: AnalyzeContract | undefined;
+        let body: { analyzeContract?: AnalyzeContract; contracts?: ContractInput[]; runPostCREAi?: boolean } = {};
         try {
-            const body = await req.json();
-            analyzeContract = body?.analyzeContract;
+            body = await req.json();
         } catch {
-            // empty or invalid JSON is fine
+            // empty or invalid JSON
         }
 
-        const defaultContracts = getDefaultContractsCRE();
-        const contractsToUse = analyzeContract
-            ? [{
-                address: analyzeContract.address.toLowerCase().startsWith("0x") ? analyzeContract.address.toLowerCase() : `0x${analyzeContract.address.toLowerCase()}`,
+        const analyzeContract = body?.analyzeContract;
+        const runPostCREAi = body?.runPostCREAi === true;
+        const contractsFromBody = Array.isArray(body?.contracts) ? body.contracts : [];
+
+        let contractsToUse: Array<{
+            address: string;
+            name: string;
+            chainSelectorName: string;
+            riskThresholds: Record<string, number>;
+            alertChannels: readonly string[];
+            priceFeeds: Array<{ pairName: string; feedAddress: string; decimals: number }>;
+        }>;
+
+        if (analyzeContract) {
+            contractsToUse = [{
+                address: normAddr(analyzeContract.address),
                 name: analyzeContract.name,
                 chainSelectorName: analyzeContract.chainSelectorName,
                 riskThresholds: analyzeContract.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
-                alertChannels: ["email"] as const,
-                priceFeeds: analyzeContract.priceFeeds?.length ? analyzeContract.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419", decimals: 8 }],
-            }]
-            : (() => {
-                const norm = (addr: string) => (addr || "").toLowerCase().startsWith("0x") ? (addr || "").toLowerCase() : `0x${(addr || "").toLowerCase()}`;
-                const toContract = (c: any) => ({
-                    address: norm(c.address || ""),
-                    name: c.name || "Unknown",
-                    chainSelectorName: c.chainSelectorName || "ethereum-mainnet",
-                    riskThresholds: c.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
-                    alertChannels: Array.isArray(c.alertChannels) && c.alertChannels.length > 0 ? c.alertChannels : ["email"],
-                    priceFeeds: Array.isArray(c.priceFeeds) ? c.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Dd9Bbd43714FE2740F5E3616155c5b8419", decimals: 8 }],
-                });
-                if (!fs.existsSync(CONFIG_PATH)) return defaultContracts.map((c) => ({ ...c }));
-                try {
-                    const existing = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
-                    const list = existing.monitoredContracts;
-                    if (!Array.isArray(list) || list.length === 0) return defaultContracts.map((c) => ({ ...c }));
-                    const fromConfig = list.map((c: any) => toContract(c));
-                    const configAddrs = new Set(fromConfig.map((c: any) => c.address));
-                    defaultContracts.forEach((d) => {
-                        if (!configAddrs.has(norm(d.address))) {
-                            fromConfig.push({ ...d });
-                            configAddrs.add(norm(d.address));
-                        }
-                    });
-                    return fromConfig;
-                } catch (e) {
-                    console.error("Failed to parse existing config, using defaults", e);
-                    return defaultContracts.map((c) => ({ ...c }));
+                alertChannels: ["email"],
+                priceFeeds: analyzeContract.priceFeeds?.length ? analyzeContract.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Dd9Bbd43714FE2740F5E3616155c5b8419", decimals: 8 }],
+            }];
+        } else if (contractsFromBody.length > 0) {
+            const origin = req.nextUrl?.origin || (process.env.NEXTAUTH_URL && (process.env.NEXTAUTH_URL.startsWith("http") ? process.env.NEXTAUTH_URL : `https://${process.env.NEXTAUTH_URL}`)) || "http://localhost:3000";
+            const discoverUrl = `${origin}/api/cre/discover`;
+
+            contractsToUse = [];
+            for (const c of contractsFromBody) {
+                if (!c.address) continue;
+                const chainSelectorName = c.chainSelectorName || (c.chain === "ethereumMainnet" ? "ethereum-mainnet" : c.chain === "polygonMainnet" ? "polygon-mainnet" : c.chain === "arbitrumMainnet" ? "arbitrum-mainnet" : c.chain === "optimismMainnet" ? "optimism-mainnet" : c.chain === "baseMainnet" ? "base-mainnet" : "ethereum-mainnet");
+                const network = chainSelectorToNetwork(chainSelectorName);
+
+                if (hasFullConfig(c)) {
+                    contractsToUse.push(toCREEntry({ ...c, chainSelectorName }));
+                    continue;
                 }
-            })();
+
+                try {
+                    const discoverRes = await fetch(discoverUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ address: c.address, network }),
+                    });
+                    if (!discoverRes.ok) {
+                        console.error(`Discovery failed for ${c.address}: ${discoverRes.status}`);
+                        contractsToUse.push(toCREEntry({ ...c, chainSelectorName }));
+                        continue;
+                    }
+                    const discoverData = await discoverRes.json();
+                    const discovery = discoverData.discovery;
+                    const suggestedRequest = discoverData.suggestedRequest;
+                    if (!discovery) {
+                        contractsToUse.push(toCREEntry({ ...c, chainSelectorName }));
+                        continue;
+                    }
+                    const entry = await buildCREConfigFromDiscovery(discovery, suggestedRequest, network);
+                    contractsToUse.push(entry);
+                } catch (e) {
+                    console.error(`Failed to build config for ${c.address}`, e);
+                    contractsToUse.push(toCREEntry({ ...c, chainSelectorName }));
+                }
+            }
+        } else {
+            return NextResponse.json(
+                { error: "No contracts provided. Add contracts in the dashboard (address + network) and run Force Scan." },
+                { status: 400 }
+            );
+        }
 
         // 1. Sync config.json with monitored contracts (or single contract for analyze)
         let currentConfig: Record<string, unknown> = {
@@ -155,10 +225,9 @@ export async function POST(req: NextRequest) {
 
         // If CRE returned no assessments (e.g. API key missing, timeout), return fallback per expected contract(s)
         let finalAssessments = assessments;
-        const fallbackSource = analyzeContract ? contractsToUse : defaultContracts;
-        if (assessments.length === 0 && fallbackSource.length > 0) {
-            finalAssessments = fallbackSource.map((c: any) => ({
-                contractAddress: (c.address || "").toLowerCase().startsWith("0x") ? (c.address || "").toLowerCase() : `0x${(c.address || "").toLowerCase()}`,
+        if (assessments.length === 0 && contractsToUse.length > 0) {
+            finalAssessments = contractsToUse.map((c) => ({
+                contractAddress: normAddr(c.address),
                 riskLevel: "LOW",
                 riskScore: 25,
                 latestScan: {
@@ -168,6 +237,18 @@ export async function POST(req: NextRequest) {
                 },
             }));
             console.log(`Returning ${finalAssessments.length} fallback assessments.`);
+        }
+
+        if (runPostCREAi && finalAssessments.length > 0 && process.env.OPENROUTER_API_KEY) {
+            const limit = Math.min(finalAssessments.length, 5);
+            for (let i = 0; i < limit; i++) {
+                try {
+                    const summary = await runPostCREAnalysis(finalAssessments[i]);
+                    (finalAssessments[i] as any).comprehensiveSummary = summary;
+                } catch (e) {
+                    console.error("Post-CRE AI for assessment", i, e);
+                }
+            }
         }
 
         return NextResponse.json({
