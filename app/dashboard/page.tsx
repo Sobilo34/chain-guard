@@ -46,6 +46,7 @@ import {
   type DashboardAlert,
   type DashboardContract,
 } from "@/lib/api";
+import { formatTvl } from "@/lib/format-metrics";
 import { createPublicClient, http, parseAbi } from "viem";
 import { toast } from "@/components/ui/toast";
 
@@ -271,7 +272,7 @@ export default function DashboardPage() {
           },
           {
             title: "Total Value Locked",
-            value: `$${(data.kpis.totalValueLocked / 1000000).toFixed(1)}M`,
+            value: formatTvl(data.kpis.totalValueLocked),
             change: "Derived from monitored contracts",
             icon: TrendingUp,
             color: "text-success",
@@ -366,7 +367,7 @@ export default function DashboardPage() {
         },
         {
           title: "Total Value Locked",
-          value: `$${(data.kpis.totalValueLocked / 1000000).toFixed(1)}M`,
+          value: formatTvl(data.kpis.totalValueLocked),
           change: "Derived from monitored contracts",
           icon: TrendingUp,
           color: "text-success",
@@ -449,7 +450,14 @@ export default function DashboardPage() {
         `Scanned: ${discovery.type} ${discovery.name || "Contract"}. Found ${balanceInfo} and ${discovery.tokens.length} tokens.`,
       );
 
-      // 2. Add contract using suggested configuration
+      // 2. Add contract using suggested configuration (with discovered tokens for portfolio TVL)
+      const discoveredTokens = Array.isArray(discovery.tokens)
+        ? discovery.tokens.map((t: { address?: string; symbol?: string; decimals?: number }) => ({
+            address: (t.address || "").trim(),
+            symbol: (t.symbol || "?").trim(),
+            decimals: t.decimals,
+          })).filter((t: { address: string }) => t.address.length > 0)
+        : undefined;
       await addContract({
         ...suggestedRequest,
         initialAssessment: preliminaryAssessment,
@@ -457,6 +465,7 @@ export default function DashboardPage() {
         riskThresholds:
           suggestedRequest.riskThresholds ||
           getRiskThresholds(addForm.riskProfile),
+        ...(discoveredTokens?.length ? { discoveredTokens } : {}),
       });
 
       // Optional: one-off CRE run for initial risk assessment (non-blocking)
@@ -498,7 +507,7 @@ export default function DashboardPage() {
         },
         {
           title: "Total Value Locked",
-          value: `$${(data.kpis.totalValueLocked / 1000000).toFixed(1)}M`,
+          value: formatTvl(data.kpis.totalValueLocked),
           change: "Derived from monitored contracts",
           icon: TrendingUp,
           color: "text-success",
@@ -998,44 +1007,51 @@ export default function DashboardPage() {
           </Card>
         </motion.div>
 
-        {/* Live Threat Feed */}
+        {/* Active Sentinel – real-time alerts (3 most recent), link to full feed */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
-          <Card className="flex h-full flex-col rounded-3xl border-border/40 bg-card/40 backdrop-blur-xl">
-            <CardHeader className="px-8 py-7">
+          <Card className="flex h-full flex-col rounded-2xl border-border/40 bg-card/40 backdrop-blur-xl">
+            <CardHeader className="px-5 py-4">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-xl font-bold tracking-tight">
-                  Active Sentinel Feed
+                <CardTitle className="text-base font-bold tracking-tight">
+                  Active Sentinel
                 </CardTitle>
                 <Badge
                   variant="outline"
-                  className="animate-pulse border-rose-500/30 bg-rose-500/5 text-rose-500 text-[10px]"
+                  className={cn(
+                    "text-[10px] font-bold uppercase",
+                    liveAlerts.filter((a) => a.status === "active").length > 0
+                      ? "animate-pulse border-rose-500/30 bg-rose-500/5 text-rose-500"
+                      : "border-muted-foreground/30 bg-muted/20 text-muted-foreground",
+                  )}
                 >
-                  LIVE SCAN
+                  {liveAlerts.filter((a) => a.status === "active").length > 0
+                    ? `${liveAlerts.filter((a) => a.status === "active").length} ACTIVE`
+                    : "CLEAR"}
                 </Badge>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                High-sensitivity triggers and anomaly detection.
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Real-time triggers from monitored contracts.
               </p>
             </CardHeader>
-            <CardContent className="flex-1 space-y-4 overflow-y-auto px-8 pb-8">
+            <CardContent className="flex-1 space-y-2 overflow-hidden px-5 pb-4">
               {liveAlerts.length > 0 ? (
-                liveAlerts.map((alert, i) => (
+                liveAlerts.slice(0, 3).map((alert, i) => (
                   <motion.div
                     key={alert.id}
-                    initial={{ opacity: 0, x: 20 }}
+                    initial={{ opacity: 0, x: 12 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.6 + i * 0.1 }}
-                    className="group relative flex flex-col gap-3 rounded-2xl border border-border/40 bg-muted/10 p-4 transition-all hover:bg-muted/20"
+                    transition={{ delay: 0.5 + i * 0.06 }}
+                    className="group relative flex flex-col gap-1.5 rounded-xl border border-border/40 bg-muted/10 p-3 transition-all hover:bg-muted/20"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
                         <div
                           className={cn(
-                            "h-7 w-7 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110",
+                            "h-6 w-6 shrink-0 rounded-md flex items-center justify-center",
                             alert.severity === "high"
                               ? "bg-rose-500/10 text-rose-500"
                               : alert.severity === "medium"
@@ -1043,47 +1059,51 @@ export default function DashboardPage() {
                                 : "bg-emerald-500/10 text-emerald-500",
                           )}
                         >
-                          <AlertTriangle className="h-4 w-4" />
+                          <AlertTriangle className="h-3.5 w-3.5" />
                         </div>
-                        <span className="text-sm font-bold tracking-tight text-foreground">
-                          {alert.contractName || "Unknown"}
+                        <span className="text-xs font-bold tracking-tight text-foreground truncate">
+                          {alert.contractName || alert.contract || "Unknown"}
                         </span>
                       </div>
-                      <span className="text-[10px] font-medium text-muted-foreground tabular-nums flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {alert.timestamp}
+                      <span className="text-[10px] font-medium text-muted-foreground tabular-nums shrink-0 flex items-center gap-0.5">
+                        <Clock className="h-2.5 w-2.5" />
+                        {typeof alert.timestamp === "string" && alert.timestamp.includes("T")
+                          ? new Date(alert.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : alert.timestamp}
                       </span>
                     </div>
-                    <div>
-                      <div className="text-[11px] font-bold tracking-wide text-foreground/80 uppercase mb-1">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-bold tracking-wide text-foreground/80 uppercase truncate">
                         {alert.type}
                       </div>
-                      <p className="text-xs leading-relaxed text-muted-foreground line-clamp-2">
-                        {alert.description ||
-                          "Potential security event detected on-chain. Requires immediate inspection."}
+                      <p className="text-[11px] leading-snug text-muted-foreground line-clamp-1">
+                        {alert.description || "Security event detected. Inspect in Alerts Feed."}
                       </p>
                     </div>
-                    <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2 pt-0.5">
                       {getSeverityBadge(alert.severity)}
                       {getStatusBadge(alert.status)}
                     </div>
                   </motion.div>
                 ))
               ) : (
-                <div className="flex h-full flex-col items-center justify-center opacity-40">
-                  <ShieldCheck className="h-10 w-10 text-muted-foreground mb-2" />
-                  <p className="text-sm">No threats currently detected.</p>
+                <div className="flex flex-col items-center justify-center py-6 opacity-50">
+                  <ShieldCheck className="h-8 w-8 text-muted-foreground mb-1.5" />
+                  <p className="text-xs">No alerts. Sentinel is clear.</p>
                 </div>
               )}
             </CardContent>
-            <div className="p-4 bg-muted/20 border-t border-border/40 rounded-b-3xl">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="w-full text-xs font-bold text-muted-foreground hover:text-primary transition-colors"
-              >
-                View System Historical Audit
-              </Button>
+            <div className="px-5 pb-4 pt-0">
+              <Link href="/dashboard/alerts">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full text-xs font-bold text-muted-foreground hover:text-primary transition-colors h-8"
+                >
+                  View all alerts
+                  <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+                </Button>
+              </Link>
             </div>
           </Card>
         </motion.div>

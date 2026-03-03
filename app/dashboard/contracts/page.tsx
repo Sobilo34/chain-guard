@@ -242,7 +242,14 @@ export default function ContractsPage() {
 
     try {
       const discoveryResult = await discoverContract(newContract.address.trim(), network);
-      const { suggestedRequest, preliminaryAssessment } = discoveryResult;
+      const { discovery, suggestedRequest, preliminaryAssessment } = discoveryResult;
+      const discoveredTokens = Array.isArray(discovery?.tokens)
+        ? discovery.tokens.map((t: { address?: string; symbol?: string; decimals?: number }) => ({
+            address: (t.address || "").trim(),
+            symbol: (t.symbol || "?").trim(),
+            decimals: t.decimals,
+          })).filter((t: { address: string }) => t.address.length > 0)
+        : undefined;
 
       await addContract({
         ...suggestedRequest,
@@ -257,6 +264,7 @@ export default function ContractsPage() {
         riskThresholds: suggestedRequest.riskThresholds,
         alertChannels: ["email"],
         initialAssessment: preliminaryAssessment,
+        ...(discoveredTokens?.length ? { discoveredTokens } : {}),
       });
 
       const refreshed = await getContracts();

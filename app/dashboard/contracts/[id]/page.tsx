@@ -78,6 +78,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getContractDetail, runAnalyzeStream, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
+import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent } from "@/lib/format-metrics";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 
@@ -134,6 +135,7 @@ export default function ContractDetailPage({
     message?: string;
   } | null>(null);
   const [needMoreInfoFormValues, setNeedMoreInfoFormValues] = useState<Record<string, string>>({});
+  const [liveMetrics, setLiveMetrics] = useState<{ tvl?: number; price?: number; volume24h?: number | null; liquidity?: number | null } | null>(null);
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -161,6 +163,56 @@ export default function ContractDetailPage({
     fetchDetail();
   }, [contractAddress]);
 
+  // Fetch real-time portfolio metrics (TVL from chain) when contract is loaded.
+  // Use this contract's discovered tokens when available (from add or analysis); otherwise API falls back to network default list.
+  useEffect(() => {
+    if (!data?.address) return;
+    const network =
+      data.chain ||
+      (() => {
+        const sel = (data.chainSelectorName || "").toLowerCase();
+        if (sel.includes("arbitrum") && !sel.includes("sepolia")) return "arbitrumMainnet";
+        if (sel.includes("optimism") && !sel.includes("sepolia")) return "optimismMainnet";
+        if (sel.includes("base") && !sel.includes("sepolia")) return "baseMainnet";
+        if (sel.includes("polygon") && !sel.includes("amoy")) return "polygonMainnet";
+        return "ethereumMainnet";
+      })();
+    const hasDiscoveredTokens = Array.isArray(data.discoveredTokens) && data.discoveredTokens.length > 0;
+    const req = hasDiscoveredTokens
+      ? fetch("/api/cre/portfolio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address: data.address,
+            network,
+            tokens: data.discoveredTokens,
+          }),
+        })
+      : fetch(`/api/cre/portfolio?address=${encodeURIComponent(data.address)}&network=${encodeURIComponent(network)}`);
+    req
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: any) => {
+        if (json && (json.tvl != null || json.price != null)) {
+          setLiveMetrics({
+            tvl: json.tvl,
+            price: json.price,
+            volume24h: json.volume24h ?? null,
+            liquidity: json.liquidity ?? null,
+          });
+          const with0x = data.address.startsWith("0x") ? data.address : `0x${data.address}`;
+          ContractStorage.updateContract(with0x, {
+            metrics: {
+              tvl: json.tvl,
+              totalValueLocked: json.tvl,
+              price: json.price,
+              currentPrice: json.price,
+            },
+          });
+        }
+      })
+      .catch(() => {});
+  }, [data?.address, data?.chain, data?.chainSelectorName, data?.discoveredTokens]);
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
@@ -180,7 +232,7 @@ export default function ContractDetailPage({
     }
   }, [analysisLogLines]);
 
-  const applyAnalysisResult = (result: AnalyzeResult) => {
+  const applyAnalysisResult = (result: AnalyzeResult & { discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }> }) => {
     const addr = (data?.address || "").toLowerCase().trim();
     const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
     const f = result.finalAnalysis;
@@ -197,6 +249,7 @@ export default function ContractDetailPage({
       affectedMetrics: result.creObservations?.metrics ? Object.keys(result.creObservations.metrics) : undefined,
       riskLevel: result.creObservations?.riskLevel,
     };
+    const discoveredTokens = result.discoveredTokens?.length ? result.discoveredTokens : undefined;
     ContractStorage.updateContract(with0x, {
       fullAnalysis: result,
       latestScan: latestScanFromAnalysis,
@@ -204,8 +257,18 @@ export default function ContractDetailPage({
       status: result.creObservations?.riskLevel || "LOW",
       riskScore: result.creObservations?.riskScore,
       metrics: result.creObservations?.metrics ? { ...data?.metrics, ...result.creObservations.metrics } : undefined,
+      ...(discoveredTokens ? { discoveredTokens } : {}),
     });
-    setData((prev: any) => (prev ? { ...prev, fullAnalysis: result, latestScan: latestScanFromAnalysis } : prev));
+    setData((prev: any) =>
+      prev
+        ? {
+            ...prev,
+            fullAnalysis: result,
+            latestScan: latestScanFromAnalysis,
+            ...(discoveredTokens ? { discoveredTokens } : {}),
+          }
+        : prev
+    );
     setAnalyzeResult(result);
   };
 
@@ -318,28 +381,38 @@ export default function ContractDetailPage({
     );
   }
 
-  // Use the fetched data; prefer CRE-returned metrics (from last Full Analysis or Force Scan) when available for correct calculated values
-  const metrics = data.fullAnalysis?.creObservations?.metrics
-    ? { ...data.metrics, ...data.fullAnalysis.creObservations.metrics }
-    : data.metrics;
+  // Use the fetched data; prefer live portfolio, then CRE metrics, then stored data
+  const metrics = {
+    ...data.metrics,
+    ...(data.fullAnalysis?.creObservations?.metrics || {}),
+    ...(liveMetrics || {}),
+  };
+  const rawTvl = metrics?.tvl ?? metrics?.totalValueLocked;
+  const rawPrice = metrics?.currentPrice ?? metrics?.price;
+  const rawVolume = metrics?.volume24h;
+  const rawLiquidity = metrics?.liquidity ?? metrics?.totalLiquidity;
   const contractData = {
     id: data.address,
     name: data.name,
     address: data.address,
     chain: data.chain,
     status: data.riskLevel.toLowerCase(),
-    tvl: (metrics?.tvl !== undefined || metrics?.totalValueLocked !== undefined)
-      ? `$${((metrics?.tvl || metrics?.totalValueLocked) / 1000000).toFixed(1)}M`
-      : (data.tvl && data.tvl !== "$0.0M") ? data.tvl : "$0.0M",
-    price: (metrics?.currentPrice !== undefined || metrics?.price !== undefined)
-      ? `$${(metrics?.currentPrice || metrics?.price).toFixed(2)}`
-      : (data.price && data.price !== "$0.00") ? data.price : "$0.00",
-    volume24h: (metrics?.volume24h != null && metrics.volume24h > 0)
-      ? `$${(metrics.volume24h / 1000000).toFixed(1)}M`
-      : data.volume24h || "$0.0M",
-    liquidity: (metrics?.liquidity !== undefined || metrics?.totalLiquidity !== undefined)
-      ? `${(metrics?.liquidity != null ? metrics.liquidity : (metrics?.totalLiquidity > 100 ? 98 : metrics?.totalLiquidity ?? 0)).toFixed(0)}%`
-      : data.liquidity || "0%",
+    tvl:
+      rawTvl !== undefined && rawTvl !== null && Number.isFinite(Number(rawTvl))
+        ? formatTvl(Number(rawTvl))
+        : (data.tvl && data.tvl !== "$0.0M" ? data.tvl : "$0.00"),
+    price:
+      rawPrice !== undefined && rawPrice !== null && Number.isFinite(Number(rawPrice))
+        ? formatPrice(Number(rawPrice))
+        : (data.price && data.price !== "$0.00" ? data.price : "$0.00"),
+    volume24h:
+      rawVolume != null && Number(rawVolume) > 0
+        ? formatVolume(Number(rawVolume))
+        : (data.volume24h && data.volume24h !== "$0.0M" ? data.volume24h : "$0.00"),
+    liquidity:
+      rawLiquidity !== undefined && rawLiquidity !== null
+        ? formatLiquidityPercent(Number(rawLiquidity))
+        : (data.liquidity && data.liquidity !== "0%" ? data.liquidity : "0%"),
   };
 
   // Real volatility: prefer CRE/metrics, then history, then parsed contract.volatility

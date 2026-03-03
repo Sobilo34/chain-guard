@@ -4,6 +4,7 @@
  */
 
 import { DashboardContract, DashboardAlert, OverviewPayload } from "./api";
+import { formatTvl, formatPrice, parseTvlToNumber } from "./format-metrics";
 
 const STORAGE_KEYS = {
     CONTRACTS: "chainguard_contracts",
@@ -117,11 +118,11 @@ export class ContractStorage {
         const promoted: Partial<DashboardContract> = {};
         if (metrics.tvl !== undefined || metrics.totalValueLocked !== undefined) {
             const val = metrics.tvl || metrics.totalValueLocked;
-            promoted.tvl = `$${(val / 1000000).toFixed(1)}M`;
+            promoted.tvl = formatTvl(Number(val));
         }
         if (metrics.currentPrice !== undefined || metrics.price !== undefined) {
             const val = metrics.currentPrice || metrics.price;
-            (promoted as any).price = `$${val.toFixed(2)}`;
+            (promoted as any).price = formatPrice(Number(val));
         }
         if (metrics.volume24h !== undefined) {
             promoted.volatility = `${(metrics.volatility || updates.volatility || 2.4)}%`; // Fallback to avoid empty
@@ -220,15 +221,7 @@ export class ContractStorage {
         let contractsWithScore = 0;
 
         contracts.forEach(c => {
-            // Parse TVL: "$1.2M" -> 1200000
-            const tvlStr = c.tvl || "$0.0M";
-            const match = tvlStr.match(/\$([\d.]+)([MK]?)/);
-            if (match) {
-                let val = parseFloat(match[1]);
-                if (match[2] === 'M') val *= 1000000;
-                if (match[2] === 'K') val *= 1000;
-                totalTvl += val;
-            }
+            totalTvl += parseTvlToNumber(c.tvl);
 
             if (c.status === "HIGH" || c.status === "CRITICAL") activeAlerts++;
 

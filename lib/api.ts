@@ -80,6 +80,8 @@ export type DashboardContract = {
   riskThresholds?: Record<string, any>;
   /** Persisted Full Analysis (Pre-CRE + CRE + Post-CRE); shown until next analysis runs. */
   fullAnalysis?: AnalyzeResult;
+  /** Tokens discovered when contract was added or when analysis ran; used for portfolio TVL. */
+  discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }>;
 };
 
 export type DashboardAlert = {
@@ -169,7 +171,13 @@ export async function getContractDetail(address: string): Promise<any> {
 }
 
 export async function addContract(payload: any): Promise<DashboardContract> {
-  // Use ContractStorage to save the contract locally
+  const discoveredTokens = payload.discoveredTokens?.length
+    ? payload.discoveredTokens.map((t: { address?: string; symbol?: string; decimals?: number }) => ({
+        address: (t.address || "").trim(),
+        symbol: (t.symbol || "?").trim(),
+        decimals: t.decimals,
+      })).filter((t: { address: string }) => t.address.length > 0)
+    : undefined;
   const newContract = ContractStorage.addContract({
     name: payload.name || "Unknown",
     address: payload.address,
@@ -181,7 +189,8 @@ export async function addContract(payload: any): Promise<DashboardContract> {
     status: payload.initialAssessment?.riskLevel || "LOW",
     latestScan: payload.initialAssessment,
     priceFeeds: payload.priceFeeds,
-    riskThresholds: payload.riskThresholds
+    riskThresholds: payload.riskThresholds,
+    ...(discoveredTokens?.length ? { discoveredTokens } : {}),
   });
 
   return newContract;

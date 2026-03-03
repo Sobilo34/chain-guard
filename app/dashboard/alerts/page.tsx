@@ -105,6 +105,16 @@ const getStatusBadge = (status: string) => {
           ACTIVE
         </Badge>
       );
+    case "acknowledged":
+      return (
+        <Badge
+          variant="outline"
+          className="border-amber-500/30 bg-amber-500/5 text-amber-500 gap-1.5 px-2.5 py-1 text-[11px] font-bold"
+        >
+          <Eye className="h-3 w-3" />
+          ACKNOWLEDGED
+        </Badge>
+      );
     case "resolved":
     case "complete":
       return (
@@ -154,13 +164,13 @@ export default function AlertsPage() {
     try {
       setActionLoading(true);
       await acknowledgeAlert(id);
-      // Refresh local data or mark as acknowledged locally
       setData((prev: any) => ({
         ...prev,
         alerts: prev.alerts.map((a: any) =>
-          a.id === id ? { ...a, acknowledged: true } : a,
+          a.id === id ? { ...a, status: "acknowledged" } : a,
         ),
       }));
+      setSelectedAlert((a: any) => (a?.id === id ? { ...a, status: "acknowledged" } : a));
     } catch (err) {
       console.error("Failed to acknowledge alert", err);
     } finally {
@@ -172,13 +182,10 @@ export default function AlertsPage() {
     try {
       setActionLoading(true);
       await resolveAlert(id);
-      // Refresh local data
       setData((prev: any) => ({
         ...prev,
         alerts: prev.alerts.map((a: any) =>
-          a.id === id
-            ? { ...a, resolved: true, resolvedAt: new Date().toISOString() }
-            : a,
+          a.id === id ? { ...a, status: "resolved" } : a,
         ),
       }));
       setSelectedAlert(null);
@@ -232,24 +239,25 @@ export default function AlertsPage() {
 
   const rawAlerts = data?.alerts || [];
 
-  // Map backend alerts to frontend UI model
+  // Map DashboardAlert (real-time from storage) to UI model
   const alerts = rawAlerts.map((a: any) => {
-    const msg = a.message ?? "";
+    const ts = typeof a.timestamp === "string" ? a.timestamp : "";
+    const date = ts ? new Date(ts) : new Date();
+    const timeStr = isNaN(date.getTime())
+      ? ""
+      : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     return {
       id: a.id,
-      timestamp: new Date(a.timestamp).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      contract: a.details?.contractName || "System Alert",
-      contractAddress: a.contractAddress || "0x0",
-      type: msg.split(":")[0]?.trim() || "Anomaly",
-      message: msg,
+      timestamp: timeStr || ts,
+      contract: a.contractName || a.contract || "Unknown",
+      contractAddress: a.contract || "—",
+      type: a.type || "Anomaly",
+      message: a.description || "Security event detected on monitored contract.",
       severity: (a.severity ?? "medium").toLowerCase(),
-      status: a.resolved ? "resolved" : "active",
+      status: (a.status ?? "active").toLowerCase(),
       data: a.details || {},
       aiSummary:
-        a.details?.aiSummary || "Chainlink Sentinel is analyzing the signal...",
+        a.details?.aiSummary || "Chainlink Sentinel is analyzing the signal.",
       notificationHistory: [
         { channel: "Email", time: "Connected", status: "sent" },
       ],
@@ -556,157 +564,6 @@ export default function AlertsPage() {
         )}
       </AnimatePresence>
 
-      <div className="flex-1 overflow-y-auto px-8 py-10 space-y-10">
-        {/* AI Engine Analysis */}
-        <section className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5 p-8 space-y-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-primary">
-              <Zap className="h-5 w-5 fill-primary" />
-              <span className="text-sm font-black uppercase tracking-[0.2em]">
-                AI Risk Intelligence
-              </span>
-            </div>
-            <Badge
-              variant="outline"
-              className="border-primary/30 text-primary text-[10px] font-bold bg-background/50 px-3 py-1 rounded-full"
-            >
-              Neural Audit Log
-            </Badge>
-          </div>
-
-          {/* Summary & Reasoning */}
-          <div className="space-y-3">
-            <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">
-              Executive Summary
-            </h5>
-            <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10">
-              {selectedAlert.data?.reasoning || selectedAlert.aiSummary}
-            </p>
-          </div>
-
-          {/* Root Cause & Consequences */}
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div className="space-y-3">
-              <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                Root Cause Analysis
-              </h5>
-              <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02]">
-                {selectedAlert.data?.cause || "Identifying trigger vector..."}
-              </p>
-            </div>
-            <div className="space-y-3">
-              <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Potential Impact
-              </h5>
-              <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02]">
-                {selectedAlert.data?.consequences ||
-                  "Assessing protocol solvency..."}
-              </p>
-            </div>
-          </div>
-
-          {/* Mitigation Strategy */}
-          {selectedAlert.data?.mitigationStrategy && (
-            <div className="space-y-3 pt-2">
-              <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Technical Mitigation Strategy
-              </h5>
-              <div className="text-xs font-bold leading-relaxed text-emerald-500/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] shadow-inner font-mono">
-                {selectedAlert.data.mitigationStrategy}
-              </div>
-            </div>
-          )}
-
-          {/* Immediate Next Steps */}
-          <div className="space-y-4">
-            <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">
-              Critical Response Checklist
-            </h5>
-            <div className="space-y-2">
-              {(
-                selectedAlert.data?.nextSteps || [
-                  "Contact security team",
-                  "Monitor mempool",
-                  "Verify oracle health",
-                ]
-              ).map((step: string, i: number) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors"
-                >
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
-                    {i + 1}
-                  </div>
-                  <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">
-                    {step}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
-            Telemetry Metrics
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
-            {Object.entries(selectedAlert.data).map(
-              ([key, value]: [string, any]) => (
-                <div
-                  key={key}
-                  className="rounded-2xl border border-border/40 bg-muted/10 p-4"
-                >
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">
-                    {key}
-                  </p>
-                  <p className="text-sm font-black text-foreground tabular-nums truncate">
-                    {String(value)}
-                  </p>
-                </div>
-              ),
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-4 pb-10">
-          <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
-            Notification Dispatch
-          </h4>
-          <div className="space-y-3">
-            {selectedAlert.notificationHistory.map((n: any, i: number) => (
-              <div
-                key={i}
-                className="flex items-center justify-between rounded-2xl border border-border/40 px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted/40 text-muted-foreground">
-                    {getChannelIcon(n.channel)}
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-foreground">
-                      {n.channel}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground uppercase">
-                      {n.time}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                  <span className="text-[10px] font-bold text-emerald-500 uppercase">
-                    Delivered
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
       <Sheet
         open={!!selectedAlert}
         onOpenChange={(open) => !open && setSelectedAlert(null)}
@@ -763,26 +620,173 @@ export default function AlertsPage() {
                 </div>
               </div>
 
+              <div className="flex-1 overflow-y-auto px-8 py-10 space-y-10">
+                {/* AI Engine Analysis */}
+                <section className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5 p-8 space-y-8">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Zap className="h-5 w-5 fill-primary" />
+                      <span className="text-sm font-black uppercase tracking-[0.2em]">
+                        AI Risk Intelligence
+                      </span>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="border-primary/30 text-primary text-[10px] font-bold bg-background/50 px-3 py-1 rounded-full"
+                    >
+                      Neural Audit Log
+                    </Badge>
+                  </div>
+
+                  {/* Summary & Reasoning */}
+                  <div className="space-y-3">
+                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
+                    <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10">
+                      {selectedAlert.data?.reasoning || selectedAlert.aiSummary}
+                    </p>
+                  </div>
+
+                  {/* Root Cause & Consequences */}
+                  <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                         Root Cause Analysis
+                      </h5>
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02]">
+                        {selectedAlert.data?.cause || "Identifying trigger vector..."}
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                         Potential Impact
+                      </h5>
+                      <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02]">
+                        {selectedAlert.data?.consequences || "Assessing protocol solvency..."}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mitigation Strategy */}
+                  {selectedAlert.data?.mitigationStrategy && (
+                    <div className="space-y-3 pt-2">
+                      <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
+                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                         Technical Mitigation Strategy
+                      </h5>
+                      <div className="text-xs font-bold leading-relaxed text-emerald-500/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] shadow-inner font-mono">
+                        {selectedAlert.data.mitigationStrategy}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Immediate Next Steps */}
+                  <div className="space-y-4">
+                    <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Critical Response Checklist</h5>
+                    <div className="space-y-2">
+                      {(selectedAlert.data?.nextSteps || ["Contact security team", "Monitor mempool", "Verify oracle health"]).map((step: string, i: number) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
+                            {i + 1}
+                          </div>
+                          <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+
+                {selectedAlert.data && Object.keys(selectedAlert.data).length > 0 && (
+                  <section className="space-y-4">
+                    <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
+                      Telemetry Metrics
+                    </h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      {Object.entries(selectedAlert.data)
+                        .filter(([, value]) => value != null && typeof value !== "object")
+                        .map(([key, value]: [string, any]) => (
+                          <div
+                            key={key}
+                            className="rounded-2xl border border-border/40 bg-muted/10 p-4"
+                          >
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">
+                              {key}
+                            </p>
+                            <p className="text-sm font-black text-foreground tabular-nums truncate">
+                              {String(value)}
+                            </p>
+                          </div>
+                        ))}
+                    </div>
+                  </section>
+                )}
+
+                <section className="space-y-4 pb-10">
+                  <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
+                    Notification Dispatch
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedAlert.notificationHistory.map(
+                      (n: any, i: number) => (
+                        <div
+                          key={i}
+                          className="flex items-center justify-between rounded-2xl border border-border/40 px-4 py-3"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted/40 text-muted-foreground">
+                              {getChannelIcon(n.channel)}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-foreground">
+                                {n.channel}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground uppercase">
+                                {n.time}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase">
+                              Delivered
+                            </span>
+                          </div>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                </section>
+              </div>
+
               <div className="p-8 border-t border-border/40 bg-muted/10">
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-3">
                   <Button
-                    className="flex-1 h-12 rounded-xl bg-primary font-bold shadow-lg shadow-primary/20 group"
+                    className="flex-1 min-w-[140px] h-11 rounded-xl bg-primary font-bold shadow-lg shadow-primary/20 group"
                     disabled={
                       actionLoading || selectedAlert.status === "resolved"
                     }
                     onClick={() => handleAcknowledge(selectedAlert.id)}
                   >
-                    {actionLoading ? "Processing..." : "Acknowledge Threat"}
+                    {actionLoading ? "Processing..." : "Acknowledge"}
                     {!actionLoading && (
-                      <ChevronRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                      <ChevronRight className="ml-1.5 h-4 w-4 transition-transform group-hover:translate-x-1" />
                     )}
                   </Button>
                   <Button
                     variant="outline"
-                    className="flex-1 h-12 rounded-xl border-border/40 font-bold"
+                    className="flex-1 min-w-[140px] h-11 rounded-xl border-border/40 font-bold"
+                    disabled={actionLoading || selectedAlert.status === "resolved"}
+                    onClick={() => handleResolve(selectedAlert.id)}
+                  >
+                    Resolve
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="h-11 rounded-xl font-bold text-muted-foreground hover:text-foreground"
                     onClick={() => setSelectedAlert(null)}
                   >
-                    Close Feed
+                    Close
                   </Button>
                 </div>
               </div>

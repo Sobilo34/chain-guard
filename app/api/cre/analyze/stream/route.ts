@@ -334,6 +334,13 @@ Return ONLY a JSON object: { "finalAnalysis": { "summary": "...", "keyFindings":
           }
         }
 
+        const discoveredTokens = Array.isArray(discovery.tokens) && discovery.tokens.length > 0
+          ? discovery.tokens.map((t: { address?: string; symbol?: string; decimals?: number }) => ({
+              address: (t.address || "").trim(),
+              symbol: (t.symbol || "?").trim(),
+              decimals: t.decimals,
+            })).filter((t: { address: string }) => t.address.length > 0)
+          : undefined;
         const result = {
           contractContext,
           initialAnalysis: preCREAnalysis,
@@ -344,6 +351,7 @@ Return ONLY a JSON object: { "finalAnalysis": { "summary": "...", "keyFindings":
             riskThresholds: entry.riskThresholds,
             resolvedPriceFeeds: entry.priceFeeds,
           },
+          ...(discoveredTokens?.length ? { discoveredTokens } : {}),
         };
         if (finalAnalysis.summary) {
           push(
