@@ -49,7 +49,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useTheme } from "next-themes";
-import { getAlertEmail, setAlertEmail, triggerTestEmail } from "@/lib/api";
+import { getAlertEmail, setAlertEmail, syncToServer, triggerTestEmail } from "@/lib/api";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -98,6 +98,7 @@ export default function SettingsPage() {
     try {
       await setAlertEmail(email);
       localStorage.setItem("chainguard.alertEmail", email);
+      syncToServer({ alertEmail: email });
       setEmailStatus("Email updated successfully.");
     } catch {
       setEmailStatus("Failed to update email. Check bridge API.");

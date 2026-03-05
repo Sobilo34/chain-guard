@@ -16,6 +16,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# server-store data (contracts, alerts, alert email)
+.data
+
 # env files
 .env*
 

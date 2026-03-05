@@ -12,6 +12,7 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
+import { formatTvl } from "@/lib/format-metrics";
 
 type VolatilityPoint = { name: string; volatility: number };
 type LiquidityPoint = { name: string; tvl: number };
@@ -37,7 +38,7 @@ const CustomTooltip = ({
         {payload.map((entry, index) => {
           const isTvl = entry.name.toLowerCase() === "tvl";
           const value = isTvl
-            ? `$${(entry.value / 1_000_000).toFixed(1)}M`
+            ? formatTvl(entry.value)
             : `${entry.value}%`;
           return (
             <p
@@ -172,7 +173,7 @@ export function DashboardCharts({
                     axisLine={false}
                     tickLine={false}
                     tick={{ fill: CHART_AXIS_AND_GRID, fontSize: 12, fontWeight: 600 }}
-                    tickFormatter={(value) => `$${Number(value) / 1_000_000}M`}
+                    tickFormatter={(value) => formatTvl(Number(value))}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar

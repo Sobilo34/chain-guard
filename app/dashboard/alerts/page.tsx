@@ -178,7 +178,9 @@ export default function AlertsPage() {
           a.id === id ? { ...a, status: "acknowledged" } : a,
         ),
       }));
-      setSelectedAlert((a: any) => (a?.id === id ? { ...a, status: "acknowledged" } : a));
+      setSelectedAlert((a: any) =>
+        a?.id === id ? { ...a, status: "acknowledged" } : a,
+      );
     } catch (err) {
       console.error("Failed to acknowledge alert", err);
     } finally {
@@ -227,14 +229,30 @@ export default function AlertsPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const result = await getAlerts(
-          undefined,
-          severityFilter === "all" ? undefined : severityFilter.toUpperCase(),
+        const res = await fetch(
+          `/api/alerts?limit=100${severityFilter === "all" ? "" : `&severity=${severityFilter.toUpperCase()}`}`,
         );
-        setData(result);
+        if (res.ok) {
+          const json = await res.json();
+          setData({ alerts: json.alerts || [], total: json.total ?? (json.alerts?.length ?? 0) });
+        } else {
+          const result = await getAlerts(
+            undefined,
+            severityFilter === "all" ? undefined : severityFilter.toUpperCase(),
+          );
+          setData(result);
+        }
       } catch (err) {
-        console.error("Failed to fetch alerts", err);
-        setError("System offline.");
+        try {
+          const result = await getAlerts(
+            undefined,
+            severityFilter === "all" ? undefined : severityFilter.toUpperCase(),
+          );
+          setData(result);
+        } catch (e) {
+          console.error("Failed to fetch alerts", e);
+          setError("System offline.");
+        }
       } finally {
         setLoading(false);
       }
@@ -280,13 +298,16 @@ export default function AlertsPage() {
       contract: a.contractName || a.contract || "Unknown",
       contractAddress: a.contract || "—",
       type: a.type || "Anomaly",
-      message: a.description || "Security event detected on monitored contract.",
+      message:
+        a.description || "Security event detected on monitored contract.",
       severity: (a.severity ?? "medium").toLowerCase(),
       status: (a.status ?? "active").toLowerCase(),
       data: a.details || {},
       aiSummary:
         a.details?.aiSummary || "Chainlink Sentinel is analyzing the signal.",
-      notificationHistory: Array.isArray(a.notificationHistory) ? a.notificationHistory : [],
+      notificationHistory: Array.isArray(a.notificationHistory)
+        ? a.notificationHistory
+        : [],
     };
   });
 
@@ -655,7 +676,9 @@ export default function AlertsPage() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {selectedAlert.type}
-                        {selectedAlert.timestamp ? ` · ${selectedAlert.timestamp}` : ""}
+                        {selectedAlert.timestamp
+                          ? ` · ${selectedAlert.timestamp}`
+                          : ""}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -726,7 +749,9 @@ export default function AlertsPage() {
 
                   {/* Summary & Reasoning */}
                   <div className="space-y-3">
-                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">Executive Summary</h5>
+                    <h5 className="text-[10px] font-black uppercase text-primary/70 tracking-widest">
+                      Executive Summary
+                    </h5>
                     <p className="text-sm font-medium leading-relaxed text-foreground/90 bg-background/30 p-4 rounded-2xl border border-primary/10">
                       {selectedAlert.data?.reasoning || selectedAlert.aiSummary}
                     </p>
@@ -736,20 +761,22 @@ export default function AlertsPage() {
                   <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
                     <div className="space-y-3">
                       <h5 className="text-[10px] font-black uppercase text-rose-500/70 tracking-widest flex items-center gap-1.5">
-                         <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                         Root Cause Analysis
+                        <div className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                        Root Cause Analysis
                       </h5>
                       <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-rose-500/10 bg-rose-500/[0.02]">
-                        {selectedAlert.data?.cause || "Identifying trigger vector..."}
+                        {selectedAlert.data?.cause ||
+                          "Identifying trigger vector..."}
                       </p>
                     </div>
                     <div className="space-y-3">
                       <h5 className="text-[10px] font-black uppercase text-amber-500/70 tracking-widest flex items-center gap-1.5">
-                         <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                         Potential Impact
+                        <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        Potential Impact
                       </h5>
                       <p className="text-xs font-semibold leading-relaxed text-muted-foreground p-4 rounded-2xl border border-amber-500/10 bg-amber-500/[0.02]">
-                        {selectedAlert.data?.consequences || "Assessing protocol solvency..."}
+                        {selectedAlert.data?.consequences ||
+                          "Assessing protocol solvency..."}
                       </p>
                     </div>
                   </div>
@@ -758,8 +785,8 @@ export default function AlertsPage() {
                   {selectedAlert.data?.mitigationStrategy && (
                     <div className="space-y-3 pt-2">
                       <h5 className="text-[10px] font-black uppercase text-emerald-500/70 tracking-widest flex items-center gap-1.5">
-                         <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                         Technical Mitigation Strategy
+                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Technical Mitigation Strategy
                       </h5>
                       <div className="text-xs font-bold leading-relaxed text-emerald-500/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] shadow-inner font-mono">
                         {selectedAlert.data.mitigationStrategy}
@@ -769,57 +796,74 @@ export default function AlertsPage() {
 
                   {/* Immediate Next Steps */}
                   <div className="space-y-4">
-                    <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">Critical Response Checklist</h5>
+                    <h5 className="text-[10px] font-black uppercase text-primary tracking-widest">
+                      Critical Response Checklist
+                    </h5>
                     <div className="space-y-2">
-                      {(selectedAlert.data?.nextSteps || ["Contact security team", "Monitor mempool", "Verify oracle health"]).map((step: string, i: number) => (
-                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors">
+                      {(
+                        selectedAlert.data?.nextSteps || [
+                          "Contact security team",
+                          "Monitor mempool",
+                          "Verify oracle health",
+                        ]
+                      ).map((step: string, i: number) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 p-3 rounded-xl bg-background/40 border border-primary/5 group/step hover:bg-background/60 transition-colors"
+                        >
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-black text-primary">
                             {i + 1}
                           </div>
-                          <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">{step}</span>
+                          <span className="text-xs font-bold text-foreground/80 group-hover/step:text-primary transition-colors">
+                            {step}
+                          </span>
                         </div>
                       ))}
                     </div>
                   </div>
                 </section>
 
-                {selectedAlert.data && Object.keys(selectedAlert.data).length > 0 && (
-                  <section className="space-y-4">
-                    <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
-                      Telemetry Metrics
-                    </h4>
-                    <div className="grid grid-cols-1 gap-4">
-                      {Object.entries(selectedAlert.data)
-                        .filter(([, value]) => value != null && typeof value !== "object")
-                        .map(([key, value]: [string, any]) => {
-                          const label = key
-                            .replace(/([A-Z])/g, " $1")
-                            .replace(/^./, (s) => s.toUpperCase())
-                            .trim();
-                          const str = String(value);
-                          const isLong = str.length > 80;
-                          return (
-                            <div
-                              key={key}
-                              className="rounded-2xl border border-border/40 bg-muted/10 p-4"
-                            >
-                              <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">
-                                {label}
-                              </p>
-                              <p
-                                className={cn(
-                                  "text-sm font-medium text-foreground/90 leading-relaxed break-words whitespace-normal",
-                                  isLong && "min-h-[3rem]"
-                                )}
+                {selectedAlert.data &&
+                  Object.keys(selectedAlert.data).length > 0 && (
+                    <section className="space-y-4">
+                      <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
+                        Telemetry Metrics
+                      </h4>
+                      <div className="grid grid-cols-1 gap-4">
+                        {Object.entries(selectedAlert.data)
+                          .filter(
+                            ([, value]) =>
+                              value != null && typeof value !== "object",
+                          )
+                          .map(([key, value]: [string, any]) => {
+                            const label = key
+                              .replace(/([A-Z])/g, " $1")
+                              .replace(/^./, (s) => s.toUpperCase())
+                              .trim();
+                            const str = String(value);
+                            const isLong = str.length > 80;
+                            return (
+                              <div
+                                key={key}
+                                className="rounded-2xl border border-border/40 bg-muted/10 p-4"
                               >
-                                {str}
-                              </p>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </section>
-                )}
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">
+                                  {label}
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium text-foreground/90 leading-relaxed break-words whitespace-normal",
+                                    isLong && "min-h-[3rem]",
+                                  )}
+                                >
+                                  {str}
+                                </p>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </section>
+                  )}
 
                 <section className="space-y-4 pb-10">
                   <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
@@ -828,7 +872,9 @@ export default function AlertsPage() {
                   <div className="space-y-3">
                     {(selectedAlert.notificationHistory || []).length === 0 ? (
                       <p className="text-xs text-muted-foreground rounded-2xl border border-border/40 px-4 py-3">
-                        No notifications sent for this alert. Configure an alert email in Settings to receive emails when high-risk alerts are detected.
+                        No notifications sent for this alert. Configure an alert
+                        email in Settings to receive emails when high-risk
+                        alerts are detected.
                       </p>
                     ) : (
                       (selectedAlert.notificationHistory || []).map(
@@ -846,7 +892,8 @@ export default function AlertsPage() {
                                   {n.channel}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground uppercase">
-                                  {typeof n.time === "string" && n.time.length > 10
+                                  {typeof n.time === "string" &&
+                                  n.time.length > 10
                                     ? new Date(n.time).toLocaleString()
                                     : n.time}
                                 </p>
@@ -883,7 +930,9 @@ export default function AlertsPage() {
                   <Button
                     variant="outline"
                     className="flex-1 min-w-[140px] h-11 rounded-xl border-border/40 font-bold"
-                    disabled={actionLoading || selectedAlert.status === "resolved"}
+                    disabled={
+                      actionLoading || selectedAlert.status === "resolved"
+                    }
                     onClick={() => handleResolve(selectedAlert.id)}
                   >
                     Resolve
@@ -892,7 +941,9 @@ export default function AlertsPage() {
                     variant="ghost"
                     className="h-11 rounded-xl font-bold text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10"
                     disabled={actionLoading}
-                    onClick={() => selectedAlert && handleDelete(selectedAlert.id)}
+                    onClick={() =>
+                      selectedAlert && handleDelete(selectedAlert.id)
+                    }
                   >
                     <Trash2 className="mr-1.5 h-4 w-4" />
                     Delete

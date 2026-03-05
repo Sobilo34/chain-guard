@@ -39,7 +39,7 @@ import {
   Globe,
 } from "lucide-react";
 import { useDashboardScan } from "@/app/dashboard/scan-context";
-import { getContracts, runGeminiScan, addContract, type DashboardContract } from "@/lib/api";
+import { getContracts, runGeminiScan, addContract, syncToServer, type DashboardContract } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
 import { toast } from "@/components/ui/toast";
 
@@ -277,6 +277,7 @@ export default function ContractsPage() {
       } catch {
         // non-blocking
       }
+      syncToServer({ contracts: ContractStorage.getContracts() });
       const r = await getContracts();
       if (r.contracts) setContracts(r.contracts);
       setNewContract({

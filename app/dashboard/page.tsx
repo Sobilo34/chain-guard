@@ -46,11 +46,12 @@ import {
   getOverview,
   addContract,
   runGeminiScan,
+  syncToServer,
   type DashboardAlert,
   type DashboardContract,
 } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
-import { formatTvl, formatSyncTime } from "@/lib/format-metrics";
+import { formatTvl, formatSyncTime, parseTvlToNumber } from "@/lib/format-metrics";
 import { createPublicClient, http, parseAbi } from "viem";
 import { toast } from "@/components/ui/toast";
 
@@ -309,6 +310,17 @@ export default function DashboardPage() {
           alertService: data.system.alertService,
           lastSync: data.system.lastSync,
         });
+        try {
+          const alertsRes = await fetch("/api/alerts?limit=3");
+          if (alertsRes.ok) {
+            const json = await alertsRes.json();
+            if (Array.isArray(json.alerts) && json.alerts.length > 0) {
+              setLiveAlerts(json.alerts);
+            }
+          }
+        } catch {
+          // keep data.alerts from getOverview
+        }
       } catch (err) {
         console.error("Dashboard refresh failed:", err);
       }
@@ -325,9 +337,9 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Auto-scan all contracts every 10 minutes when tab is visible (alerts + email at detection)
+  // Auto-scan all contracts every 15 minutes when tab is visible (alerts + email at detection)
   useEffect(() => {
-    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
     let intervalId: ReturnType<typeof setInterval> | undefined;
 
     const runBackgroundScan = async () => {
@@ -340,7 +352,7 @@ export default function DashboardPage() {
       }
     };
 
-    intervalId = setInterval(runBackgroundScan, TEN_MINUTES_MS);
+    intervalId = setInterval(runBackgroundScan, FIFTEEN_MINUTES_MS);
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
@@ -419,6 +431,7 @@ export default function DashboardPage() {
       } catch {
         // non-blocking: contract is added; portfolio can refresh when user opens detail
       }
+      syncToServer({ contracts: ContractStorage.getContracts() });
       const res = await getOverview();
       const d = res?.data;
       if (d) {
@@ -451,17 +464,6 @@ export default function DashboardPage() {
     return Number.isFinite(parsed) ? parsed : null;
   };
 
-  const parseTvl = (value?: string) => {
-    if (!value) return null;
-    const cleaned = value.replace(/\$/g, "");
-    if (cleaned.toLowerCase().endsWith("m")) {
-      const amount = Number.parseFloat(cleaned.replace(/m/i, ""));
-      return Number.isFinite(amount) ? amount * 1_000_000 : null;
-    }
-    const parsed = Number.parseFloat(cleaned.replace(/,/g, ""));
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
   // Prefer real metrics from CRE scan (metrics.volatility 0–1 or 0–100, metrics.tvl/totalValueLocked in dollars)
   const volatilitySeries = liveContracts
     .map((contract) => {
@@ -483,7 +485,7 @@ export default function DashboardPage() {
       const tvl =
         typeof raw === "number" && raw >= 0
           ? raw
-          : parseTvl(contract.tvl);
+          : parseTvlToNumber(contract.tvl);
       return { name: contract.name, tvl };
     })
     .filter((item) => item.tvl != null && Number.isFinite(item.tvl)) as Array<{

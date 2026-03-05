@@ -624,6 +624,34 @@ export async function runGeminiScan(payload?: {
             // Email failed; alert still recorded, notificationHistory stays empty
           }
         }
+      } else if (assessment.riskLevel === "MEDIUM") {
+        const scan = assessment.latestScan || (assessment as unknown as ContractScanResult);
+        const details = (cs || scan?.reasoning || scanTyped?.mitigationStrategy)
+          ? {
+              aiSummary: cs?.summary ?? scan?.reasoning,
+              rootCause: cs?.rootCause ?? scanTyped?.cause,
+              potentialImpact: cs?.potentialImpact ?? scanTyped?.consequences ?? scanTyped?.estimatedImpact,
+              keyFindings: cs?.keyFindings?.length ? cs.keyFindings : undefined,
+              recommendations: cs?.recommendations?.length
+                ? cs.recommendations
+                : scanTyped?.mitigationStrategy
+                  ? [scanTyped.mitigationStrategy]
+                  : undefined,
+              nextSteps: cs?.nextSteps ?? scanTyped?.nextSteps,
+              suggestedActions: cs?.suggestedActions ?? scanTyped?.suggestedActions,
+            }
+          : undefined;
+        ContractStorage.addAlert({
+          timestamp: new Date().toISOString(),
+          contract: address,
+          contractName: contracts.find(c => normalizeAddr(c.address) === address)?.name || "Unknown",
+          type: "Medium Risk Detected",
+          description: scan?.reasoning || "AI detected medium risk during scan.",
+          severity: "medium",
+          status: "active",
+          ...(details && Object.values(details).some(Boolean) ? { details } : {}),
+        });
+        // No email for MEDIUM; only HIGH/CRITICAL send email
       }
     }
   }
@@ -699,6 +727,24 @@ export async function resolveAlert(alertId: string) {
 export async function deleteAlert(alertId: string) {
   const removed = ContractStorage.deleteAlert(alertId);
   return { success: removed };
+}
+
+/** Sync contracts and/or alert email to the server so the cron can use them. Call after adding/removing contracts or saving email. */
+export async function syncToServer(payload: { contracts?: DashboardContract[]; alertEmail?: string }): Promise<void> {
+  if (typeof window === "undefined") return;
+  const body: { contracts?: DashboardContract[]; alertEmail?: string } = {};
+  if (payload.contracts !== undefined) body.contracts = payload.contracts;
+  if (payload.alertEmail !== undefined) body.alertEmail = payload.alertEmail.trim();
+  if (Object.keys(body).length === 0) return;
+  try {
+    await fetch("/api/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    console.warn("syncToServer failed", e);
+  }
 }
 
 export async function triggerTestEmail(): Promise<{ success: boolean; message: string }> {

@@ -269,7 +269,7 @@ export class ContractStorage {
                 riskScore: contractsWithScore > 0 ? Math.round(totalRiskScore / contractsWithScore) : 0,
             },
             contracts,
-            alerts: alerts.slice(0, 5), // Latest 5 for overview
+            alerts: alerts.slice(0, 3), // Latest 3 for overview
             system: {
                 oracle: "Chainlink Price Feeds",
                 riskEngine: "OpenRouter AI",
