@@ -79,6 +79,7 @@ import { Label } from "@/components/ui/label";
 import { getContractDetail, runAnalyzeStream, isGenericOrUnknownContractName, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
 import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent, formatSyncTime } from "@/lib/format-metrics";
+import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast";
 
@@ -538,6 +539,19 @@ export default function ContractDetailPage({
     { name: "Manipulation", value: (metrics as any)?.manipulation != null ? Math.round((metrics as any).manipulation * 100) : 15, color: "hsl(var(--chart-3))" },
     { name: "Depeg", value: (metrics?.priceDeviationFromPeg != null) ? Math.round(Number(metrics.priceDeviationFromPeg) * (metrics.priceDeviationFromPeg <= 1 ? 100 : 1)) : (data.riskScore > 50 ? 35 : 5), color: "hsl(var(--chart-4))" },
   ];
+
+  // Single-contract series for 24h volatility and liquidity charts (same as overview but for this contract only)
+  const singleVolatilitySeries = currentVolatility != null && Number.isFinite(currentVolatility)
+    ? [{ name: data.name, volatility: currentVolatility }]
+    : [];
+  const tvlNumber = (typeof metrics?.tvl === "number" && Number.isFinite(metrics.tvl))
+    ? metrics.tvl
+    : (typeof metrics?.totalValueLocked === "number" && Number.isFinite(metrics.totalValueLocked))
+      ? metrics.totalValueLocked
+      : 0;
+  const singleLiquiditySeries = tvlNumber > 0
+    ? [{ name: data.name, tvl: tvlNumber }]
+    : [];
 
   const CustomTooltip = ({
     active,
@@ -1127,6 +1141,14 @@ export default function ContractDetailPage({
             );
           })()}
 
+      {/* 24h Volatility & Liquidity for this contract (same chart types as overview) */}
+      <DashboardCharts
+        volatilitySeries={singleVolatilitySeries}
+        liquiditySeries={singleLiquiditySeries}
+        scope="single"
+        contractName={data.name}
+      />
+
       {/* Main Grid */}
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="space-y-8 lg:col-span-2">
@@ -1138,7 +1160,7 @@ export default function ContractDetailPage({
                   Market Variance
                 </CardTitle>
                 <CardDescription className="text-xs font-medium text-muted-foreground">
-                  Rolling 7-day volatility analysis.
+                  Rolling 7-day volatility for this contract.
                 </CardDescription>
               </div>
               <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-black text-emerald-500 uppercase tracking-wider">
@@ -1203,7 +1225,7 @@ export default function ContractDetailPage({
                 Sentinel Health
               </CardTitle>
               <CardDescription className="text-xs font-medium text-muted-foreground/60 uppercase tracking-widest">
-                Aggregate Risk Score
+                Contract Risk Score
               </CardDescription>
             </CardHeader>
             <CardContent className="px-8 pb-8">

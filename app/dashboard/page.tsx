@@ -817,6 +817,7 @@ export default function DashboardPage() {
       <DashboardCharts
         volatilitySeries={volatilitySeries}
         liquiditySeries={liquiditySeries}
+        scope="aggregate"
       />
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">

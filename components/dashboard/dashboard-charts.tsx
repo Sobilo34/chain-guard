@@ -58,12 +58,25 @@ const CustomTooltip = ({
 export function DashboardCharts({
   volatilitySeries,
   liquiditySeries,
+  scope = "aggregate",
+  contractName,
 }: {
   volatilitySeries: VolatilityPoint[];
   liquiditySeries: LiquidityPoint[];
+  /** "aggregate" = all contracts combined (overview); "single" = one contract (detail page) */
+  scope?: "aggregate" | "single";
+  /** When scope is "single", label charts for this contract */
+  contractName?: string;
 }) {
   const hasVolatility = volatilitySeries.length > 0;
   const hasLiquidity = liquiditySeries.length > 0;
+  const isSingle = scope === "single" && contractName;
+  const volSubtitle = isSingle
+    ? `24h volatility for ${contractName}`
+    : "Aggregate volatility across all monitored contracts";
+  const liqSubtitle = isSingle
+    ? `Current liquidity for ${contractName}`
+    : "Current liquidity vs minimum threshold (all contracts)";
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -74,7 +87,7 @@ export function DashboardCharts({
             Market Volatility (24h)
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Aggregate volatility across all monitored contracts
+            {volSubtitle}
           </p>
         </CardHeader>
         <CardContent>
@@ -137,7 +150,7 @@ export function DashboardCharts({
             Liquidity Health
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Current liquidity vs minimum threshold
+            {liqSubtitle}
           </p>
         </CardHeader>
         <CardContent>
