@@ -250,7 +250,23 @@ export default function ContractDetailPage({
       riskLevel: result.creObservations?.riskLevel,
     };
     const discoveredTokens = result.discoveredTokens?.length ? result.discoveredTokens : undefined;
+
+    // Update contract name from analysis: use discovered name if real, else a short fallback
+    const discoveredName = (result.contractContext?.name || "").trim();
+    const isGenericName = !discoveredName || discoveredName === "Discovered Contract" || discoveredName === "New Contract";
+    const tokens = result.contractContext?.tokens;
+    const tokenSymbols = Array.isArray(tokens) && tokens.length > 0
+      ? tokens.map((t: { symbol?: string }) => t.symbol).filter(Boolean).slice(0, 3)
+      : [];
+    const fallbackName = tokenSymbols.length > 0
+      ? `Contract (${tokenSymbols.join(", ")})`
+      : result.contractContext?.type
+        ? `${result.contractContext.type} Contract`
+        : undefined;
+    const newName = !isGenericName ? discoveredName : (fallbackName || data?.name);
+
     ContractStorage.updateContract(with0x, {
+      ...(newName ? { name: newName } : {}),
       fullAnalysis: result,
       latestScan: latestScanFromAnalysis,
       riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
@@ -264,6 +280,7 @@ export default function ContractDetailPage({
       prev
         ? {
             ...prev,
+            ...(newName ? { name: newName } : {}),
             fullAnalysis: result,
             latestScan: latestScanFromAnalysis,
             lastUpdate: analyzedAt,
@@ -271,6 +288,7 @@ export default function ContractDetailPage({
           }
         : prev
     );
+    if (newName) setEditedName(newName);
     setAnalyzeResult(result);
   };
 

@@ -17,18 +17,46 @@ const NETWORKS: Record<string, any> = {
     polygonMainnet: { chain: polygon, name: "Polygon Mainnet", selector: "polygon-mainnet" },
 };
 
+const ALCHEMY_RPC: Record<string, string> = {
+    ethereumMainnet: "https://eth-mainnet.g.alchemy.com/v2",
+    mainnet: "https://eth-mainnet.g.alchemy.com/v2",
+    arbitrumMainnet: "https://arb-mainnet.g.alchemy.com/v2",
+    optimismMainnet: "https://opt-mainnet.g.alchemy.com/v2",
+    baseMainnet: "https://base-mainnet.g.alchemy.com/v2",
+    polygonMainnet: "https://polygon-mainnet.g.alchemy.com/v2",
+};
+
+function getRpcUrl(network: string): string | undefined {
+    const key = process.env.ALCHEMY_API_KEY;
+    if (!key?.trim()) return undefined;
+    const baseUrl = ALCHEMY_RPC[network] || ALCHEMY_RPC.ethereumMainnet;
+    return `${baseUrl}/${key.trim()}`;
+}
+
+const DISCOVER_TIMEOUT_MS = 120_000;
+
 export async function POST(req: NextRequest) {
+    let address: string;
+    let network: string;
     try {
-        const { address, network } = await req.json();
+        const body = await req.json();
+        address = body?.address;
+        network = body?.network ?? "ethereumMainnet";
+    } catch {
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-        if (!address) {
-            return NextResponse.json({ error: "Address is required" }, { status: 400 });
-        }
+    if (!address) {
+        return NextResponse.json({ error: "Address is required" }, { status: 400 });
+    }
 
+    const run = async (): Promise<NextResponse> => {
+    try {
         const netConfig = NETWORKS[network] || NETWORKS.ethereumMainnet;
+        const rpcUrl = getRpcUrl(network);
         const client = createPublicClient({
             chain: netConfig.chain,
-            transport: http(),
+            transport: http(rpcUrl),
         });
 
         const contractAddress = address as Address;
@@ -260,6 +288,16 @@ export async function POST(req: NextRequest) {
         console.error("Discovery failed", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
+    };
+
+    return Promise.race([
+        run(),
+        new Promise<NextResponse>((_, reject) =>
+            setTimeout(() => reject(new Error("Discovery timed out. RPC or explorer may be slow.")), DISCOVER_TIMEOUT_MS)
+        ),
+    ]).catch((err: any) =>
+        NextResponse.json({ error: err?.message || "Discovery timed out" }, { status: 504 })
+    );
 }
 
 function getCommonTokens(network: string): string[] {

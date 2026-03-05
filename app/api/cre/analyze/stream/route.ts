@@ -98,15 +98,34 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       const push = (data: string) => controller.enqueue(encoder.encode(data));
 
+      const DISCOVER_TIMEOUT_MS = 150_000;
+
       try {
         push(sseLine({ type: "narrative", text: "Reading the contract on-chain so we know what we're dealing with." }));
 
         const discoverUrl = `${origin}/api/cre/discover`;
-        const discoverRes = await fetch(discoverUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ address, network }),
-        });
+        const discoverController = new AbortController();
+        const timeoutId = setTimeout(() => discoverController.abort(), DISCOVER_TIMEOUT_MS);
+        let discoverRes: Response;
+        try {
+          discoverRes = await fetch(discoverUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ address, network }),
+            signal: discoverController.signal,
+          });
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          if (fetchErr?.name === "AbortError") {
+            push(sseLine({ type: "error", message: "Discovery timed out. The RPC or explorer may be slow. Try again or use a contract on a less congested network." }));
+          } else {
+            push(sseLine({ type: "error", message: `Discovery failed: ${fetchErr?.message || "network error"}` }));
+          }
+          controller.close();
+          return;
+        }
+        clearTimeout(timeoutId);
+
         if (!discoverRes.ok) {
           const err = await discoverRes.text();
           push(sseLine({ type: "error", message: `Discovery failed: ${err}` }));
