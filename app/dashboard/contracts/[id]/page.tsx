@@ -76,7 +76,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getContractDetail, runAnalyzeStream, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
+import { getContractDetail, runAnalyzeStream, isGenericOrUnknownContractName, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
 import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent, formatSyncTime } from "@/lib/format-metrics";
 import { useEffect, useRef, useState } from "react";
@@ -264,9 +264,11 @@ export default function ContractDetailPage({
         ? `${result.contractContext.type} Contract`
         : undefined;
     const newName = !isGenericName ? discoveredName : (fallbackName || data?.name);
+    const shouldUpdateName =
+      newName && isGenericOrUnknownContractName(data?.name);
 
     ContractStorage.updateContract(with0x, {
-      ...(newName ? { name: newName } : {}),
+      ...(shouldUpdateName ? { name: newName } : {}),
       fullAnalysis: result,
       latestScan: latestScanFromAnalysis,
       riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
@@ -280,7 +282,7 @@ export default function ContractDetailPage({
       prev
         ? {
             ...prev,
-            ...(newName ? { name: newName } : {}),
+            ...(shouldUpdateName ? { name: newName } : {}),
             fullAnalysis: result,
             latestScan: latestScanFromAnalysis,
             lastUpdate: analyzedAt,
@@ -288,8 +290,55 @@ export default function ContractDetailPage({
           }
         : prev
     );
-    if (newName) setEditedName(newName);
+    if (shouldUpdateName && newName) setEditedName(newName);
     setAnalyzeResult(result);
+
+    const tokensFromAnalysis = result.discoveredTokens;
+    if (tokensFromAnalysis && tokensFromAnalysis.length > 0) {
+      const network = data?.chain || (() => {
+        const sel = (data?.chainSelectorName || "").toLowerCase();
+        if (sel.includes("arbitrum") && !sel.includes("sepolia")) return "arbitrumMainnet";
+        if (sel.includes("optimism") && !sel.includes("sepolia")) return "optimismMainnet";
+        if (sel.includes("base") && !sel.includes("sepolia")) return "baseMainnet";
+        if (sel.includes("polygon") && !sel.includes("amoy")) return "polygonMainnet";
+        return "ethereumMainnet";
+      })();
+      fetch("/api/cre/portfolio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: data?.address,
+          network,
+          tokens: tokensFromAnalysis,
+        }),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((portfolioJson: any) => {
+          if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
+            const metricsUpdate = {
+              tvl: portfolioJson.tvl,
+              totalValueLocked: portfolioJson.tvl,
+              price: portfolioJson.price,
+              currentPrice: portfolioJson.price,
+              ...(portfolioJson.volume24h != null && { volume24h: portfolioJson.volume24h }),
+              ...(portfolioJson.liquidity != null && { liquidity: portfolioJson.liquidity }),
+            };
+            ContractStorage.updateContract(with0x, {
+              metrics: { ...data?.metrics, ...metricsUpdate },
+            });
+            setData((prev: any) =>
+              prev ? { ...prev, metrics: { ...prev.metrics, ...metricsUpdate } } : prev
+            );
+            setLiveMetrics({
+              tvl: portfolioJson.tvl,
+              price: portfolioJson.price,
+              volume24h: portfolioJson.volume24h ?? null,
+              liquidity: portfolioJson.liquidity ?? null,
+            });
+          }
+        })
+        .catch(() => {});
+    }
   };
 
   const runAnalysisStream = async (userContext?: Record<string, string>) => {

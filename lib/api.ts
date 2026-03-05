@@ -93,6 +93,8 @@ export type DashboardAlert = {
   type: string;
   severity: "low" | "medium" | "high";
   status: "active" | "acknowledged" | "resolved";
+  /** When and how this alert was notified (e.g. email sent at creation). Only set when send actually succeeds. */
+  notificationHistory?: Array<{ channel: string; time: string; status: string }>;
   /** Optional risk analysis for email and UI (AI summary, recommendations, etc.) */
   details?: {
     aiSummary?: string;
@@ -253,6 +255,122 @@ export async function runAnalyze(address: string, network: string): Promise<Anal
   }
 }
 
+/** True when the contract name is a placeholder (unknown/generic). Only then should AI analysis update the name. */
+export function isGenericOrUnknownContractName(name: string | undefined): boolean {
+  const n = (name || "").trim();
+  return (
+    !n ||
+    n === "Unknown" ||
+    n === "Discovered Contract" ||
+    n === "New Contract" ||
+    n === "Contract"
+  );
+}
+
+/** Derive analyze API network string from a dashboard contract (chainSelectorName / chain). */
+export function getNetworkFromContract(contract: DashboardContract): string {
+  const chain = (contract as any).chain;
+  if (chain && typeof chain === "string") {
+    const c = chain.toLowerCase();
+    if (c.includes("arbitrum") && !c.includes("sepolia")) return "arbitrumMainnet";
+    if (c.includes("optimism") && !c.includes("sepolia")) return "optimismMainnet";
+    if (c.includes("base") && !c.includes("sepolia")) return "baseMainnet";
+    if (c.includes("polygon") && !c.includes("amoy")) return "polygonMainnet";
+    if (c.includes("ethereum")) return "ethereumMainnet";
+  }
+  const sel = (contract.chainSelectorName || "").toLowerCase();
+  if (sel.includes("arbitrum") && !sel.includes("sepolia")) return "arbitrumMainnet";
+  if (sel.includes("optimism") && !sel.includes("sepolia")) return "optimismMainnet";
+  if (sel.includes("base") && !sel.includes("sepolia")) return "baseMainnet";
+  if (sel.includes("polygon") && !sel.includes("amoy")) return "polygonMainnet";
+  return "ethereumMainnet";
+}
+
+/** Apply a full analysis result to contract storage (used by Force Scan and by contract detail page). */
+export function applyAnalyzeResultToStorage(
+  contractAddress: string,
+  result: AnalyzeResult & { discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }> },
+  existingContract?: DashboardContract | null
+): void {
+  const addr = (contractAddress || "").toLowerCase().trim();
+  const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+  const f = result.finalAnalysis;
+  const latestScanFromAnalysis = {
+    reasoning: f?.summary ?? result.creObservations?.latestScan?.reasoning,
+    cause: f?.rootCause,
+    consequences: f?.potentialImpact,
+    estimatedImpact: f?.potentialImpact,
+    mitigationStrategy: f?.recommendations?.length
+      ? f.recommendations.join("\n\n")
+      : undefined,
+    nextSteps: f?.nextSteps,
+    suggestedActions: f?.suggestedActions,
+    affectedMetrics: result.creObservations?.metrics ? Object.keys(result.creObservations.metrics) : undefined,
+    riskLevel: result.creObservations?.riskLevel,
+  };
+  const discoveredTokens = result.discoveredTokens?.length
+    ? result.discoveredTokens
+    : (result.contractContext?.tokens as Array<{ address: string; symbol: string; decimals?: number }> | undefined);
+
+  const discoveredName = (result.contractContext?.name || "").trim();
+  const isGenericName = !discoveredName || discoveredName === "Discovered Contract" || discoveredName === "New Contract";
+  const tokens = result.contractContext?.tokens;
+  const tokenSymbols = Array.isArray(tokens)
+    ? (tokens as Array<{ symbol?: string }>).map((t) => t.symbol).filter(Boolean).slice(0, 3)
+    : [];
+  const fallbackName =
+    tokenSymbols.length > 0
+      ? `Contract (${tokenSymbols.join(", ")})`
+      : result.contractContext?.type
+        ? `${result.contractContext.type} Contract`
+        : undefined;
+  const newName = !isGenericName ? discoveredName : (fallbackName || existingContract?.name);
+  const shouldUpdateName =
+    newName &&
+    isGenericOrUnknownContractName(existingContract?.name);
+
+  ContractStorage.updateContract(with0x, {
+    ...(shouldUpdateName ? { name: newName } : {}),
+    fullAnalysis: result,
+    latestScan: latestScanFromAnalysis,
+    riskLevel: (result.creObservations?.riskLevel || "LOW").toLowerCase() as any,
+    status: result.creObservations?.riskLevel || "LOW",
+    riskScore: result.creObservations?.riskScore,
+    metrics:
+      result.creObservations?.metrics && existingContract?.metrics
+        ? { ...existingContract.metrics, ...result.creObservations.metrics }
+        : result.creObservations?.metrics,
+    ...(discoveredTokens?.length ? { discoveredTokens } : {}),
+    lastUpdate: new Date().toISOString(),
+  });
+}
+
+/** Run full analysis (Pre-CRE + CRE + Post-CRE) for every added contract and persist results. Used after Force Scan. */
+export async function runFullAnalysisForAllContracts(): Promise<{
+  success: number;
+  failed: number;
+  errors?: string[];
+}> {
+  const contracts = ContractStorage.getContracts();
+  const errors: string[] = [];
+  let success = 0;
+  let failed = 0;
+  for (const contract of contracts) {
+    const address = contract.address;
+    const network = getNetworkFromContract(contract);
+    try {
+      const result = await runAnalyze(address, network);
+      applyAnalyzeResultToStorage(address, result, contract);
+      success++;
+    } catch (e: any) {
+      failed++;
+      const msg = e?.message || String(e);
+      errors.push(`${contract.name || address}: ${msg}`);
+    }
+  }
+  return { success, failed, errors: errors.length > 0 ? errors : undefined };
+}
+
 export type NeedMoreInfoQuestion = { id: string; label: string; placeholder?: string };
 
 export type RunAnalyzeStreamCallbacks = {
@@ -398,6 +516,22 @@ export async function runGeminiScan(payload?: {
   runPostCREAi?: boolean;
 }) {
   const contracts = ContractStorage.getContracts();
+  if (contracts.length === 0) {
+    return { success: true, assessmentsCount: 0, data: null, quotaExceeded: false };
+  }
+
+  let scanInProgress = false;
+  try {
+    scanInProgress = (globalThis as any).__chainguard_scanInProgress === true;
+  } catch {
+    // ignore
+  }
+  if (scanInProgress) {
+    return { success: false, assessmentsCount: 0, data: null, quotaExceeded: false };
+  }
+  (globalThis as any).__chainguard_scanInProgress = true;
+
+  try {
   const response = await fetchJson<{ success: boolean; assessments: any[]; rawOutput?: string; error?: string }>(
     `${API_BASE_URL}/simulate`,
     {
@@ -414,10 +548,11 @@ export async function runGeminiScan(payload?: {
   };
 
   if (response.success && assessments.length > 0) {
-    assessments.forEach((assessment: SentinelAssessment) => {
+    for (const assessment of assessments) {
       const address = normalizeAddr(assessment.contractAddress);
       const cs = assessment.comprehensiveSummary;
       const latestScan = assessment.latestScan || (assessment as unknown as ContractScanResult);
+      const scanTyped = latestScan as ContractScanResult;
       const withSummary: ContractScanResult = cs
         ? {
             ...latestScan,
@@ -445,9 +580,7 @@ export async function runGeminiScan(payload?: {
       }
 
       if (assessment.riskLevel === "HIGH" || assessment.riskLevel === "CRITICAL") {
-        const cs = assessment.comprehensiveSummary;
         const scan = assessment.latestScan || (assessment as unknown as ContractScanResult);
-        const scanTyped = scan as ContractScanResult;
         const details = (cs || scan?.reasoning || scanTyped?.mitigationStrategy)
           ? {
               aiSummary: cs?.summary ?? scan?.reasoning,
@@ -476,14 +609,23 @@ export async function runGeminiScan(payload?: {
         const newAlert = ContractStorage.addAlert(alertPayload);
         const email = typeof window !== "undefined" ? localStorage.getItem("chainguard_alert_email") : null;
         if (email && email.trim()) {
-          fetch("/api/notifications/send-email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ to: email.trim(), alert: { ...alertPayload, id: newAlert.id } }),
-          }).catch(() => {});
+          try {
+            const res = await fetch("/api/notifications/send-email", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ to: email.trim(), alert: { ...alertPayload, id: newAlert.id } }),
+            });
+            if (res.ok) {
+              ContractStorage.updateAlert(newAlert.id, {
+                notificationHistory: [{ channel: "Email", time: new Date().toISOString(), status: "Sent" }],
+              });
+            }
+          } catch {
+            // Email failed; alert still recorded, notificationHistory stays empty
+          }
         }
       }
-    });
+    }
   }
 
   if (response.success) {
@@ -497,6 +639,9 @@ export async function runGeminiScan(payload?: {
     success: response.success,
     assessmentsCount: assessments.length,
   };
+  } finally {
+    (globalThis as any).__chainguard_scanInProgress = false;
+  }
 }
 
 export async function getAlerts(

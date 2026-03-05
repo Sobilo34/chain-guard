@@ -4,6 +4,7 @@ import React from "react";
 import { Suspense } from "react";
 import { useState } from "react";
 import Link from "next/link";
+import { DashboardScanProvider } from "./scan-context";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ export default function DashboardLayout({
   };
 
   return (
+    <DashboardScanProvider>
     <div className="relative min-h-screen bg-background transition-colors duration-300 flex flex-col">
       {/* Dynamic Background elements - Subtler than landing */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -329,5 +331,6 @@ export default function DashboardLayout({
         </div>
       </footer>
     </div>
+    </DashboardScanProvider>
   );
 }

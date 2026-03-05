@@ -38,7 +38,9 @@ import {
   ShieldCheck,
   Globe,
 } from "lucide-react";
+import { useDashboardScan } from "@/app/dashboard/scan-context";
 import { getContracts, runGeminiScan, addContract, type DashboardContract } from "@/lib/api";
+import { ContractStorage } from "@/lib/storage";
 import { toast } from "@/components/ui/toast";
 
 const getRiskBadge = (level: string) => {
@@ -134,9 +136,9 @@ const getChainInfo = (chain: string) => {
 };
 
 export default function ContractsPage() {
+  const scanContext = useDashboardScan();
   const [searchQuery, setSearchQuery] = useState("");
   const [chainFilter, setChainFilter] = useState("all");
-  const [isScanning, setIsScanning] = useState(false);
   const [contracts, setContracts] = useState<DashboardContract[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -170,9 +172,12 @@ export default function ContractsPage() {
 
     refresh();
     intervalId = setInterval(refresh, 15000);
+    const onStorage = () => refresh();
+    window.addEventListener("storage", onStorage);
 
     return () => {
       if (intervalId) clearInterval(intervalId);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
@@ -251,6 +256,27 @@ export default function ContractsPage() {
         riskThresholds: {},
         alertChannels: ["email"],
       });
+      const network = newContract.chain;
+      try {
+        const portfolioRes = await fetch(
+          `/api/cre/portfolio?address=${encodeURIComponent(with0x)}&network=${encodeURIComponent(network)}`
+        );
+        if (portfolioRes.ok) {
+          const portfolioJson = await portfolioRes.json();
+          if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
+            ContractStorage.updateContract(with0x.toLowerCase(), {
+              metrics: {
+                tvl: portfolioJson.tvl,
+                totalValueLocked: portfolioJson.tvl,
+                price: portfolioJson.price,
+                currentPrice: portfolioJson.price,
+              },
+            });
+          }
+        }
+      } catch {
+        // non-blocking
+      }
       const r = await getContracts();
       if (r.contracts) setContracts(r.contracts);
       setNewContract({
@@ -274,44 +300,8 @@ export default function ContractsPage() {
     }
   };
 
-  const handleGlobalScan = async () => {
-    if (contracts.length === 0) {
-      toast.error("No contracts to scan", {
-        description: "Add contracts (address + network) in the Registry first, then run Force Scan.",
-      });
-      return;
-    }
-    try {
-      setIsScanning(true);
-      const scanResponse = await runGeminiScan({ runPostCREAi: true });
-      const count = scanResponse.assessmentsCount ?? 0;
-      if (scanResponse.success && count > 0) {
-        const refreshed = await getContracts();
-        if (refreshed.contracts) setContracts(refreshed.contracts);
-        toast.success("Force Scan complete", {
-          description: `${count} contract(s) updated with risk data and AI analysis.`,
-        });
-      } else if (scanResponse.success && count === 0) {
-        toast.warning("No results", {
-          description: "CRE completed but no assessments returned. Check API logs or try again.",
-        });
-      } else {
-        toast.success("Scan started", {
-          description: "Processing your monitored contracts.",
-        });
-        const refreshed = await getContracts();
-        if (refreshed.contracts) setContracts(refreshed.contracts);
-      }
-    } catch (err: any) {
-      console.error("Global scan failed", err);
-      const message =
-        typeof err?.message === "string" ? err.message : String(err || "Unknown error");
-      toast.error("Force Scan failed", {
-        description: message,
-      });
-    } finally {
-      setIsScanning(false);
-    }
+  const handleGlobalScan = () => {
+    scanContext?.runForceScan();
   };
 
   const handleContractScan = async (address: string) => {
@@ -695,17 +685,17 @@ export default function ContractsPage() {
           <Button
             variant="ghost"
             size="icon"
-            disabled={isScanning}
+            disabled={scanContext?.isScanning}
             onClick={handleGlobalScan}
             className={cn(
               "h-11 w-11 rounded-2xl border border-border/30 hover:bg-muted/50",
-              isScanning && "animate-pulse border-primary/40 text-primary",
+              scanContext?.isScanning && "animate-pulse border-primary/40 text-primary",
             )}
           >
             <Zap
               className={cn(
                 "h-4 w-4",
-                isScanning ? "fill-primary" : "text-muted-foreground",
+                scanContext?.isScanning ? "fill-primary" : "text-muted-foreground",
               )}
             />
           </Button>
@@ -797,14 +787,14 @@ export default function ContractsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        disabled={isScanning}
+                        disabled={scanContext?.isScanning}
                         onClick={() => handleContractScan(contract.address)}
                         className="h-10 w-10 rounded-xl hover:bg-primary/10 hover:text-primary transition-all"
                       >
                         <Zap
                           className={cn(
                             "h-4 w-4",
-                            isScanning && "fill-primary",
+                            scanContext?.isScanning && "fill-primary",
                           )}
                         />
                       </Button>

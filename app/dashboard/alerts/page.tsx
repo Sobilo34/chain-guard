@@ -41,6 +41,7 @@ import {
   ArrowUpRight,
   Zap,
   ChevronRight,
+  ChevronUp,
   Trash2,
 } from "lucide-react";
 import * as framerMotion from "framer-motion";
@@ -161,6 +162,11 @@ export default function AlertsPage() {
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
   const [selectedAlert, setSelectedAlert] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [alertHeaderExpanded, setAlertHeaderExpanded] = useState(true);
+
+  useEffect(() => {
+    if (selectedAlert) setAlertHeaderExpanded(true);
+  }, [selectedAlert?.id]);
 
   const handleAcknowledge = async (id: string) => {
     try {
@@ -280,9 +286,7 @@ export default function AlertsPage() {
       data: a.details || {},
       aiSummary:
         a.details?.aiSummary || "Chainlink Sentinel is analyzing the signal.",
-      notificationHistory: [
-        { channel: "Email", time: "Connected", status: "sent" },
-      ],
+      notificationHistory: Array.isArray(a.notificationHistory) ? a.notificationHistory : [],
     };
   });
 
@@ -616,61 +620,93 @@ export default function AlertsPage() {
 
       <Sheet
         open={!!selectedAlert}
-        onOpenChange={(open) => !open && setSelectedAlert(null)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedAlert(null);
+          setAlertHeaderExpanded(true);
+        }}
       >
-        <SheetContent className="w-full sm:max-w-xl border-l-border/40 bg-card/90 backdrop-blur-2xl p-0">
+        <SheetContent className="flex flex-col w-full sm:max-w-xl h-full max-h-[100vh] border-l-border/40 bg-card/90 backdrop-blur-2xl p-0">
           {selectedAlert && (
-            <div className="flex flex-col h-full overflow-hidden">
-              <div className="px-8 py-10 border-b border-border/40">
-                <div className="flex items-center justify-between mb-8">
-                  <div
-                    className={cn(
-                      "flex h-14 w-14 items-center justify-center rounded-2xl shadow-xl",
-                      selectedAlert.severity === "high" ||
-                        selectedAlert.severity === "critical"
-                        ? "bg-rose-500 shadow-rose-500/20 text-white"
-                        : selectedAlert.severity === "medium"
-                          ? "bg-amber-500 shadow-amber-500/20 text-white"
-                          : "bg-emerald-500 shadow-emerald-500/20 text-white",
+            <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              <div className="shrink-0 border-b border-border/40">
+                <button
+                  type="button"
+                  onClick={() => setAlertHeaderExpanded((e) => !e)}
+                  className="w-full px-8 py-4 flex items-center justify-between gap-4 text-left hover:bg-muted/30 transition-colors rounded-none"
+                  aria-expanded={alertHeaderExpanded}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-lg",
+                        selectedAlert.severity === "high" ||
+                          selectedAlert.severity === "critical"
+                          ? "bg-rose-500 shadow-rose-500/20 text-white"
+                          : selectedAlert.severity === "medium"
+                            ? "bg-amber-500 shadow-amber-500/20 text-white"
+                            : "bg-emerald-500 shadow-emerald-500/20 text-white",
+                      )}
+                    >
+                      <AlertTriangle className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-foreground truncate">
+                        {selectedAlert.contract}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedAlert.type}
+                        {selectedAlert.timestamp ? ` · ${selectedAlert.timestamp}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {getStatusBadge(selectedAlert.status)}
+                      {getSeverityBadge(selectedAlert.severity)}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-muted-foreground" aria-hidden>
+                    {alertHeaderExpanded ? (
+                      <ChevronUp className="h-5 w-5" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5" />
                     )}
-                  >
-                    <AlertTriangle className="h-8 w-8" />
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">
-                      Alert Reference
+                  </span>
+                </button>
+                {alertHeaderExpanded && (
+                  <div className="px-8 pb-6 pt-2 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-right">
+                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">
+                          Alert Reference
+                        </p>
+                        <p className="font-mono text-xs font-bold text-foreground">
+                          #{selectedAlert.id}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-primary uppercase tracking-tighter">
+                        {selectedAlert.type}
+                      </span>
+                      <span className="h-1 w-1 rounded-full bg-border" />
+                      <span className="text-sm font-bold text-muted-foreground tabular-nums">
+                        {selectedAlert.timestamp}
+                      </span>
+                    </div>
+                    <SheetTitle className="text-2xl font-black tracking-tight leading-tight text-foreground">
+                      {selectedAlert.contract}
+                    </SheetTitle>
+                    <p className="text-sm font-semibold text-muted-foreground leading-relaxed italic">
+                      {selectedAlert.message}
                     </p>
-                    <p className="font-mono text-xs font-bold text-foreground">
-                      #{selectedAlert.id}
-                    </p>
+                    <div className="flex items-center gap-3 pt-2">
+                      {getStatusBadge(selectedAlert.status)}
+                      {getSeverityBadge(selectedAlert.severity)}
+                    </div>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-black text-primary uppercase tracking-tighter">
-                      {selectedAlert.type}
-                    </span>
-                    <span className="h-1 w-1 rounded-full bg-border" />
-                    <span className="text-sm font-bold text-muted-foreground tabular-nums">
-                      {selectedAlert.timestamp}
-                    </span>
-                  </div>
-                  <SheetTitle className="text-3xl font-black tracking-tight leading-none text-foreground">
-                    {selectedAlert.contract}
-                  </SheetTitle>
-                  <p className="text-base font-semibold text-muted-foreground leading-relaxed italic">
-                    {selectedAlert.message}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3 mt-8">
-                  {getStatusBadge(selectedAlert.status)}
-                  {getSeverityBadge(selectedAlert.severity)}
-                </div>
+                )}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-8 py-10 space-y-10">
+              <div className="flex-1 min-h-0 overflow-y-auto px-8 py-6 space-y-10">
                 {/* AI Engine Analysis */}
                 <section className="relative overflow-hidden rounded-[2rem] border border-primary/20 bg-primary/5 p-8 space-y-8">
                   <div className="flex items-center justify-between">
@@ -752,22 +788,35 @@ export default function AlertsPage() {
                     <h4 className="text-[11px] font-black uppercase text-muted-foreground tracking-widest">
                       Telemetry Metrics
                     </h4>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       {Object.entries(selectedAlert.data)
                         .filter(([, value]) => value != null && typeof value !== "object")
-                        .map(([key, value]: [string, any]) => (
-                          <div
-                            key={key}
-                            className="rounded-2xl border border-border/40 bg-muted/10 p-4"
-                          >
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase mb-1">
-                              {key}
-                            </p>
-                            <p className="text-sm font-black text-foreground tabular-nums truncate">
-                              {String(value)}
-                            </p>
-                          </div>
-                        ))}
+                        .map(([key, value]: [string, any]) => {
+                          const label = key
+                            .replace(/([A-Z])/g, " $1")
+                            .replace(/^./, (s) => s.toUpperCase())
+                            .trim();
+                          const str = String(value);
+                          const isLong = str.length > 80;
+                          return (
+                            <div
+                              key={key}
+                              className="rounded-2xl border border-border/40 bg-muted/10 p-4"
+                            >
+                              <p className="text-[10px] font-bold text-muted-foreground uppercase mb-2 tracking-wider">
+                                {label}
+                              </p>
+                              <p
+                                className={cn(
+                                  "text-sm font-medium text-foreground/90 leading-relaxed break-words whitespace-normal",
+                                  isLong && "min-h-[3rem]"
+                                )}
+                              >
+                                {str}
+                              </p>
+                            </div>
+                          );
+                        })}
                     </div>
                   </section>
                 )}
@@ -777,39 +826,47 @@ export default function AlertsPage() {
                     Notification Dispatch
                   </h4>
                   <div className="space-y-3">
-                    {selectedAlert.notificationHistory.map(
-                      (n: any, i: number) => (
-                        <div
-                          key={i}
-                          className="flex items-center justify-between rounded-2xl border border-border/40 px-4 py-3"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted/40 text-muted-foreground">
-                              {getChannelIcon(n.channel)}
+                    {(selectedAlert.notificationHistory || []).length === 0 ? (
+                      <p className="text-xs text-muted-foreground rounded-2xl border border-border/40 px-4 py-3">
+                        No notifications sent for this alert. Configure an alert email in Settings to receive emails when high-risk alerts are detected.
+                      </p>
+                    ) : (
+                      (selectedAlert.notificationHistory || []).map(
+                        (n: any, i: number) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between rounded-2xl border border-border/40 px-4 py-3"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-muted/40 text-muted-foreground">
+                                {getChannelIcon(n.channel)}
+                              </div>
+                              <div>
+                                <p className="text-xs font-bold text-foreground">
+                                  {n.channel}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground uppercase">
+                                  {typeof n.time === "string" && n.time.length > 10
+                                    ? new Date(n.time).toLocaleString()
+                                    : n.time}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-xs font-bold text-foreground">
-                                {n.channel}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground uppercase">
-                                {n.time}
-                              </p>
+                            <div className="flex items-center gap-1.5">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              <span className="text-[10px] font-bold text-emerald-500 uppercase">
+                                {n.status || "Delivered"}
+                              </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                            <span className="text-[10px] font-bold text-emerald-500 uppercase">
-                              Delivered
-                            </span>
-                          </div>
-                        </div>
-                      ),
+                        ),
+                      )
                     )}
                   </div>
                 </section>
               </div>
 
-              <div className="p-8 border-t border-border/40 bg-muted/10">
+              <div className="shrink-0 p-8 border-t border-border/40 bg-muted/10">
                 <div className="flex flex-wrap gap-3">
                   <Button
                     className="flex-1 min-w-[140px] h-11 rounded-xl bg-primary font-bold shadow-lg shadow-primary/20 group"

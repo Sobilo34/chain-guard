@@ -8,10 +8,18 @@ import {
 
 const RESEND_API_URL = "https://api.resend.com/emails";
 
+const DEFAULT_FROM = "ChainGuard <onboarding@resend.dev>";
+
+/** Resend accepts: "email@example.com" or "Name <email@example.com>". Must contain a valid email. */
 function getFromEmail(): string {
   const from = process.env.RESEND_FROM_EMAIL?.trim();
-  if (from) return from;
-  return "ChainGuard <onboarding@resend.dev>";
+  if (!from) return DEFAULT_FROM;
+  // Reject API keys or non-email values (e.g. RESEND_FROM_EMAIL set to RESEND_API_KEY by mistake)
+  if (from.startsWith("re_") || !from.includes("@")) return DEFAULT_FROM;
+  // Must look like either "email@domain.tld" or "Name <email@domain.tld>"
+  const emailPart = from.includes("<") && from.includes(">") ? from.replace(/^.*<([^>]+)>.*$/, "$1") : from;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPart.trim())) return DEFAULT_FROM;
+  return from;
 }
 
 export async function POST(req: NextRequest) {

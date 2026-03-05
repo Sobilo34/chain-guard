@@ -220,6 +220,25 @@ export class ContractStorage {
     }
 
     /**
+     * Update an alert by id (e.g. append notificationHistory when email is sent).
+     */
+    static updateAlert(alertId: string, updates: Partial<DashboardAlert>): DashboardAlert | null {
+        const alerts = this.getAlerts();
+        const index = alerts.findIndex(a => a.id === alertId);
+        if (index === -1) return null;
+        const existing = alerts[index];
+        const merged: DashboardAlert = { ...existing, ...updates };
+        if (updates.notificationHistory && updates.notificationHistory.length > 0) {
+            const existingHistory = existing.notificationHistory || [];
+            merged.notificationHistory = [...existingHistory, ...updates.notificationHistory];
+        }
+        const updated = [...alerts];
+        updated[index] = merged;
+        this.saveAlerts(updated);
+        return merged;
+    }
+
+    /**
      * Get dashboard overview
      */
     static getOverview(): OverviewPayload {

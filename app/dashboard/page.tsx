@@ -41,6 +41,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
+import { useDashboardScan } from "@/app/dashboard/scan-context";
 import {
   getOverview,
   addContract,
@@ -48,6 +49,7 @@ import {
   type DashboardAlert,
   type DashboardContract,
 } from "@/lib/api";
+import { ContractStorage } from "@/lib/storage";
 import { formatTvl, formatSyncTime } from "@/lib/format-metrics";
 import { createPublicClient, http, parseAbi } from "viem";
 import { toast } from "@/components/ui/toast";
@@ -237,8 +239,7 @@ export default function DashboardPage() {
     alertService?: string;
     lastSync?: string;
   }>({});
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const scanContext = useDashboardScan();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -315,104 +316,38 @@ export default function DashboardPage() {
 
     refresh();
     intervalId = setInterval(refresh, 15000);
+    const onStorage = () => refresh();
+    window.addEventListener("storage", onStorage);
 
     return () => {
       if (intervalId) clearInterval(intervalId);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
-  const handleQuickScan = async () => {
-    if (liveContracts.length === 0) {
-      toast.warning("No contracts to scan", {
-        description: "Add contracts (address + network) in the Registry, then run Force Scan.",
-      });
-      return;
-    }
-    setIsScanning(true);
-    setScanMessage("Initializing CRE Simulator...");
-    try {
-      const scanResponse = await runGeminiScan({ runPostCREAi: true });
+  // Auto-scan all contracts every 10 minutes when tab is visible (alerts + email at detection)
+  useEffect(() => {
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
 
-      if (scanResponse.data.quotaExceeded) {
-        setScanMessage(
-          "OpenRouter quota exceeded — showing fallback assessment.",
-        );
-      } else if (scanResponse.success && scanResponse.assessmentsCount === 0) {
-        setScanMessage("Scan finished but no contract results returned.");
-        toast.warning("No assessments returned", {
-          description:
-            "CRE completed but no contract results were received. Check that config matches your monitored contracts and see terminal/API logs.",
-        });
-      } else if (scanResponse.success && scanResponse.assessmentsCount > 0) {
-        setScanMessage("Scan complete. Updating dashboard...");
-        toast.success("Scan complete", {
-          description: `${scanResponse.assessmentsCount} contract(s) updated with latest risk data.`,
-        });
-      } else {
-        setScanMessage("Scan complete. Updating dashboard...");
+    const runBackgroundScan = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (liveContracts.length === 0) return;
+      try {
+        await runGeminiScan({ runPostCREAi: true });
+      } catch (e) {
+        console.error("Background scan failed:", e);
       }
+    };
 
-      // Re-fetch overview so Sync time, KPIs, and contract lastUpdate reflect latest state
-      setScanMessage("Scan complete. Syncing state...");
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const response = await getOverview();
-      const data = response.data;
-      setLiveContracts([...data.contracts]);
-      setLiveAlerts([...data.alerts]);
-      setSystemStatus({
-        oracle: data.system.oracle,
-        riskEngine: data.system.riskEngine,
-        alertService: data.system.alertService,
-        lastSync: data.system.lastSync,
-      });
-      setLiveKpis([
-        {
-          title: "Monitored Contracts",
-          value: `${data.kpis.monitoredContracts}`,
-          change: "Live from bridge API",
-          icon: FileCode2,
-          color: "text-primary",
-          bgColor: "bg-primary/10",
-        },
-        {
-          title: "Active Alerts",
-          value: `${data.kpis.activeAlerts}`,
-          change: `${data.kpis.activeAlerts} currently active`,
-          icon: AlertTriangle,
-          color: "text-danger",
-          bgColor: "bg-danger/10",
-        },
-        {
-          title: "Total Value Locked",
-          value: formatTvl(data.kpis.totalValueLocked),
-          change: "Derived from monitored contracts",
-          icon: TrendingUp,
-          color: "text-success",
-          bgColor: "bg-success/10",
-        },
-        {
-          title: "Risk Score",
-          value: `${data.kpis.riskScore}/100`,
-          change: data.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing",
-          icon: ShieldCheck,
-          color: data.kpis.riskScore >= 70 ? "text-warning" : "text-success",
-          bgColor:
-            data.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10",
-        },
-      ]);
+    intervalId = setInterval(runBackgroundScan, TEN_MINUTES_MS);
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [liveContracts.length]);
 
-      setScanMessage("Dashboard updated.");
-
-      // Notify other tabs/components that storage changed
-      window.dispatchEvent(new Event("storage"));
-
-      setTimeout(() => setScanMessage(null), 5000);
-    } catch (err) {
-      setScanMessage("Scan failed. Check bridge API and terminal logs.");
-      console.error(err);
-    } finally {
-      setIsScanning(false);
-    }
+  const handleQuickScan = () => {
+    scanContext?.runForceScan();
   };
 
   const getRiskThresholds = (profile: string) => {
@@ -463,6 +398,27 @@ export default function DashboardPage() {
         riskThresholds: getRiskThresholds(addForm.riskProfile),
         alertChannels: ["email"],
       });
+      const network = addForm.chain;
+      try {
+        const portfolioRes = await fetch(
+          `/api/cre/portfolio?address=${encodeURIComponent(with0x)}&network=${encodeURIComponent(network)}`
+        );
+        if (portfolioRes.ok) {
+          const portfolioJson = await portfolioRes.json();
+          if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
+            ContractStorage.updateContract(with0x.toLowerCase(), {
+              metrics: {
+                tvl: portfolioJson.tvl,
+                totalValueLocked: portfolioJson.tvl,
+                price: portfolioJson.price,
+                currentPrice: portfolioJson.price,
+              },
+            });
+          }
+        }
+      } catch {
+        // non-blocking: contract is added; portfolio can refresh when user opens detail
+      }
       const res = await getOverview();
       const d = res?.data;
       if (d) {
@@ -575,7 +531,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {scanMessage && (
+          {(scanContext?.scanMessage ?? null) && (
             <motion.div
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
@@ -583,7 +539,7 @@ export default function DashboardPage() {
             >
               <Activity className="h-3.5 w-3.5 text-primary animate-pulse" />
               <span className="text-xs font-bold text-primary italic">
-                {scanMessage}
+                {scanContext?.scanMessage}
               </span>
             </motion.div>
           )}
@@ -591,17 +547,17 @@ export default function DashboardPage() {
           <Button
             size="lg"
             variant="outline"
-            disabled={isScanning}
+            disabled={scanContext?.isScanning}
             onClick={handleQuickScan}
             className="h-12 rounded-2xl border-border/60 bg-background/50 backdrop-blur-md transition-all hover:border-primary/50 hover:bg-primary/5"
           >
             <RefreshCw
               className={cn(
                 "mr-2 h-4 w-4 text-primary",
-                isScanning && "animate-spin",
+                scanContext?.isScanning && "animate-spin",
               )}
             />
-            {isScanning ? "Scanning Ecosystem..." : "Force Scan"}
+            {scanContext?.isScanning ? "Scanning Ecosystem..." : "Force Scan"}
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
