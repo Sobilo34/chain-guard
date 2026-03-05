@@ -23,6 +23,15 @@ const CHAIN_ID_TO_EXPLORER_URL: Record<number, string> = {
     8453: "https://basescan.org",
 };
 
+/** Blockscout explorer base URLs per chain (for contract/view links). */
+const CHAIN_ID_TO_BLOCKSCOUT: Record<number, string> = {
+    1: "https://eth.blockscout.com",
+    137: "https://polygon.blockscout.com",
+    42161: "https://arbitrum.blockscout.com",
+    10: "https://optimism.blockscout.com",
+    8453: "https://base.blockscout.com",
+};
+
 const SOURCE_SUMMARY_MAX_CHARS = 8000;
 
 export function getChainIdForNetwork(network: string): number | undefined {
@@ -42,6 +51,16 @@ export function getExplorerUrl(network: string, address: string): string | undef
     if (!chainId) return undefined;
     const base = CHAIN_ID_TO_EXPLORER_URL[chainId] ?? "https://etherscan.io";
     return `${base}/address/${address}`;
+}
+
+/** Blockscout address URL for the given network (e.g. "Ethereum Mainnet"). */
+export function getBlockscoutAddressUrl(network: string, address: string): string | undefined {
+    const chainId = getChainIdForNetwork(network);
+    if (!chainId) return undefined;
+    const base = CHAIN_ID_TO_BLOCKSCOUT[chainId];
+    if (!base) return undefined;
+    const addr = address.startsWith("0x") ? address : `0x${address}`;
+    return `${base}/address/${addr}`;
 }
 
 async function explorerGet(params: Record<string, string>): Promise<{ result?: string; status?: string; message?: string }> {

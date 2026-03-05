@@ -78,6 +78,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getContractDetail, runAnalyzeStream, isGenericOrUnknownContractName, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
+import { getBlockscoutAddressUrl } from "@/lib/cre/explorer-api";
 import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent, formatSyncTime } from "@/lib/format-metrics";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { useEffect, useRef, useState } from "react";
@@ -906,10 +907,30 @@ export default function ContractDetailPage({
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          <Button className="h-12 rounded-[1.25rem] bg-primary px-8 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95">
-            <ExternalLink className="mr-2 h-4 w-4" />
-            Etherscan
-          </Button>
+          {(() => {
+            const chain = data?.chain || "";
+            const addr = (data?.address || "").trim();
+            const blockscoutUrl = chain && addr ? getBlockscoutAddressUrl(chain, addr) : null;
+            return blockscoutUrl ? (
+              <Button
+                asChild
+                className="h-12 rounded-[1.25rem] bg-primary px-8 font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+              >
+                <a href={blockscoutUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Blockscout
+                </a>
+              </Button>
+            ) : (
+              <Button
+                disabled
+                className="h-12 rounded-[1.25rem] bg-primary px-8 font-bold text-primary-foreground shadow-lg shadow-primary/20 opacity-60"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Blockscout
+              </Button>
+            );
+          })()}
         </motion.div>
       </div>
 
@@ -994,7 +1015,7 @@ export default function ContractDetailPage({
                         No analysis yet. Run <strong>Full Analysis</strong> to start monitoring this contract.
                       </p>
                       <Button
-                        onClick={() => setAnalysisModalOpen(true)}
+                        onClick={handleFullAnalysis}
                         disabled={analyzeLoading}
                         className="rounded-xl font-bold"
                       >
