@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { buildCREConfigFromDiscovery } from "@/lib/cre/build-config";
+import { runDiscovery } from "@/lib/cre/run-discovery";
 
 function isMainnet(network: string): boolean {
   const n = (network || "").toLowerCase();
@@ -103,20 +104,16 @@ export async function POST(req: NextRequest) {
       try {
         push(sseLine({ type: "narrative", text: "Reading the contract on-chain so we know what we're dealing with." }));
 
-        const discoverUrl = `${origin}/api/cre/discover`;
-        const discoverController = new AbortController();
-        const timeoutId = setTimeout(() => discoverController.abort(), DISCOVER_TIMEOUT_MS);
-        let discoverRes: Response;
+        let discoverData: { discovery: any; suggestedRequest: any };
         try {
-          discoverRes = await fetch(discoverUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ address, network }),
-            signal: discoverController.signal,
-          });
+          discoverData = await Promise.race([
+            runDiscovery(address, network),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("Discovery timed out. The RPC or explorer may be slow.")), DISCOVER_TIMEOUT_MS)
+            ),
+          ]);
         } catch (fetchErr: any) {
-          clearTimeout(timeoutId);
-          if (fetchErr?.name === "AbortError") {
+          if (fetchErr?.message?.includes("timed out")) {
             push(sseLine({ type: "error", message: "Discovery timed out. The RPC or explorer may be slow. Try again or use a contract on a less congested network." }));
           } else {
             push(sseLine({ type: "error", message: `Discovery failed: ${fetchErr?.message || "network error"}` }));
@@ -124,15 +121,7 @@ export async function POST(req: NextRequest) {
           controller.close();
           return;
         }
-        clearTimeout(timeoutId);
 
-        if (!discoverRes.ok) {
-          const err = await discoverRes.text();
-          push(sseLine({ type: "error", message: `Discovery failed: ${err}` }));
-          controller.close();
-          return;
-        }
-        const discoverData = await discoverRes.json();
         const discovery = discoverData.discovery;
         const suggestedRequest = discoverData.suggestedRequest;
         if (!discovery) {
