@@ -658,6 +658,7 @@ export async function runGeminiScan(payload?: {
 
   if (response.success) {
     ContractStorage.updateSyncTimestamp();
+    await syncToServer({ contracts: ContractStorage.getContracts() });
   }
 
   return {

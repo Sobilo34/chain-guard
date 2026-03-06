@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getContracts, getAlertEmail, addAlert, updateAlert } from "@/lib/contract-store";
+import { getContracts, getAlertEmail, addAlert, updateAlert, updateContractFromScan } from "@/lib/contract-store";
 import type { DashboardAlert } from "@/lib/api";
 
 const CRON_SECRET = process.env.CRON_SECRET;
@@ -65,6 +65,8 @@ async function runScan(req: NextRequest) {
 
     for (const assessment of assessments) {
       const address = normalizeAddr(assessment.contractAddress);
+      await updateContractFromScan(address, assessment);
+
       const riskLevel = (assessment.riskLevel || "LOW").toUpperCase();
       const isHighOrCritical = riskLevel === "HIGH" || riskLevel === "CRITICAL";
       const isMedium = riskLevel === "MEDIUM";

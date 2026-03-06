@@ -97,6 +97,63 @@ function writeExtendedContract(address: string, data: Partial<DashboardContract>
   fs.writeFileSync(p, JSON.stringify(data, null, 2), "utf-8");
 }
 
+/** Update contract extended data from a scan assessment. Ensures lastUpdate, riskLevel, latestScan, metrics are persisted every interval. */
+export async function updateContractFromScan(
+  address: string,
+  assessment: {
+    riskLevel?: string;
+    riskScore?: number;
+    latestScan?: any;
+    comprehensiveSummary?: any;
+    metrics?: Record<string, unknown>;
+  }
+): Promise<void> {
+  const addr = normAddr(address);
+  const now = new Date().toISOString();
+  const riskLevel = (assessment.riskLevel || "low").toLowerCase() as "low" | "medium" | "high";
+  const cs = assessment.comprehensiveSummary;
+  const latestScan = assessment.latestScan || assessment;
+  const withSummary = cs
+    ? {
+        ...latestScan,
+        reasoning: cs.summary ?? latestScan?.reasoning,
+        cause: cs.rootCause ?? latestScan?.cause,
+        consequences: cs.potentialImpact ?? latestScan?.consequences,
+        mitigationStrategy: cs.recommendations?.length ? cs.recommendations.join("\n\n") : latestScan?.mitigationStrategy,
+        nextSteps: cs.nextSteps ?? latestScan?.nextSteps,
+        suggestedActions: cs.suggestedActions ?? latestScan?.suggestedActions,
+      }
+    : latestScan;
+
+  if (useOnChainRegistry()) {
+    const existing = readExtendedContract(addr) || {};
+    writeExtendedContract(addr, {
+      ...existing,
+      lastUpdate: now,
+      latestScan: withSummary,
+      riskLevel,
+      riskScore: assessment.riskScore ?? existing.riskScore,
+      status: assessment.riskLevel || existing.status,
+      metrics: { ...existing.metrics, ...assessment.metrics },
+    });
+    return;
+  }
+  const { getContracts, setContracts } = await import("./server-store");
+  const contracts = await getContracts();
+  const idx = contracts.findIndex((c) => normAddr(c.address) === addr);
+  if (idx === -1) return;
+  contracts[idx] = {
+    ...contracts[idx],
+    lastUpdate: now,
+    latestScan: withSummary,
+    riskLevel,
+    riskScore: assessment.riskScore ?? contracts[idx].riskScore,
+    status: assessment.riskLevel || contracts[idx].status,
+    metrics: { ...contracts[idx].metrics, ...assessment.metrics },
+  };
+  await setContracts(contracts);
+}
+
 interface AlertsCache {
   alerts: Record<string, Partial<DashboardAlert>>;
   bytes32ToId: Record<string, string>;

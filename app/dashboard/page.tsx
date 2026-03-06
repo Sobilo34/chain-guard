@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -241,6 +241,7 @@ export default function DashboardPage() {
     lastSync?: string;
   }>({});
   const scanContext = useDashboardScan();
+  const refreshRef = useRef<(() => void) | undefined>(undefined);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -326,6 +327,7 @@ export default function DashboardPage() {
       }
     };
 
+    refreshRef.current = refresh;
     refresh();
     intervalId = setInterval(refresh, 15000);
     const onStorage = () => refresh();
@@ -349,9 +351,20 @@ export default function DashboardPage() {
       if (liveContracts.length === 0) return;
       try {
         if (intervalMs <= 60000) {
-          await fetch("/api/cron/scan", { method: "POST" });
+          const cronRes = await fetch("/api/cron/scan", { method: "POST" });
+          if (cronRes.ok) {
+            const syncRes = await fetch("/api/sync");
+            if (syncRes.ok) {
+              const { contracts } = await syncRes.json();
+              if (Array.isArray(contracts) && contracts.length > 0) {
+                ContractStorage.saveContracts(contracts);
+              }
+            }
+            refreshRef.current?.();
+          }
         } else {
           await runGeminiScan({ runPostCREAi: true });
+          refreshRef.current?.();
         }
       } catch (e) {
         console.error("Background scan failed:", e);
@@ -873,12 +886,20 @@ export default function DashboardPage() {
                           href={`/dashboard/contracts/${contract.id || contract.address}`}
                           className="flex items-center justify-between rounded-xl border border-border/30 bg-muted/20 px-4 py-3 transition-colors hover:bg-primary/5 hover:border-primary/30 group"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
-                            <span className="text-sm font-semibold truncate">
-                              {contract.name}
-                            </span>
-                            {getRiskBadge(contract.riskLevel || "low")}
+                          <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-3">
+                              <FileCode2 className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
+                              <span className="text-sm font-semibold truncate">
+                                {contract.name}
+                              </span>
+                              {getRiskBadge(contract.riskLevel || "low")}
+                            </div>
+                            {contract.lastUpdate && (
+                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground pl-7" title={contract.lastUpdate}>
+                                <Clock className="h-2.5 w-2.5" />
+                                Updated {formatSyncTime(contract.lastUpdate)}
+                              </span>
+                            )}
                           </div>
                           <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary" />
                         </Link>

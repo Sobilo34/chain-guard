@@ -37,9 +37,11 @@ import {
   Trash2,
   ShieldCheck,
   Globe,
+  Clock,
 } from "lucide-react";
 import { useDashboardScan } from "@/app/dashboard/scan-context";
 import { getContracts, runGeminiScan, addContract, syncToServer, type DashboardContract } from "@/lib/api";
+import { formatSyncTime } from "@/lib/format-metrics";
 import { ContractStorage } from "@/lib/storage";
 import { toast } from "@/components/ui/toast";
 
@@ -159,6 +161,17 @@ export default function ContractsPage() {
     let intervalId: ReturnType<typeof setInterval> | undefined;
 
     const refresh = async () => {
+      try {
+        const syncRes = await fetch("/api/sync");
+        if (syncRes.ok) {
+          const { contracts } = await syncRes.json();
+          if (Array.isArray(contracts)) {
+            ContractStorage.saveContracts(contracts);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
       try {
         const response = await getContracts();
         if (response.contracts) {
@@ -772,6 +785,12 @@ export default function ContractsPage() {
                         </p>
                       </div>
                     </div>
+                    {contract.lastUpdate && (
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground" title={contract.lastUpdate}>
+                        <Clock className="h-3 w-3 shrink-0" />
+                        Last updated {formatSyncTime(contract.lastUpdate)}
+                      </div>
+                    )}
                   </CardContent>
 
                   <div className="px-7 pb-7 flex items-center justify-between">
