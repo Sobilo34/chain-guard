@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
@@ -171,6 +171,21 @@ export async function POST(req: NextRequest) {
         }
 
         fs.writeFileSync(CONFIG_PATH, JSON.stringify(currentConfig, null, 2));
+
+        // Pre-flight: ensure cre CLI is available (not the case in serverless/production)
+        let creInPath = "unknown";
+        try {
+            const whichOut = execSync("which cre 2>/dev/null || echo NOT_FOUND", { encoding: "utf-8", timeout: 2000 }).trim();
+            creInPath = whichOut === "NOT_FOUND" || !whichOut ? "NOT_FOUND" : whichOut;
+        } catch {
+            creInPath = "ERROR_CHECKING";
+        }
+        if (creInPath === "NOT_FOUND" || creInPath === "ERROR_CHECKING") {
+            return NextResponse.json({
+                error: "CRE (Chainlink Risk Engine) CLI is not installed or not in PATH. Full Analysis and cron scans require the `cre` command. Install with: npm install -g @chainlink/cre. In serverless/hosted deployments (Pxxl, Vercel), subprocess execution is not supported—run locally or use a self-hosted backend with CRE installed.",
+                code: "CRE_NOT_FOUND",
+            }, { status: 503 });
+        }
 
         // 2. Execute CRE simulation with .env for private keys and other secrets
         const command = `cre workflow simulate chainguard-sentinel -T local-simulation -e .env`;

@@ -3,7 +3,7 @@
  * Used by /api/cre/simulate and by the analyze stream (avoids self-fetch in production).
  */
 
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import { promisify } from "util";
 import fs from "fs";
 import path from "path";
@@ -93,6 +93,32 @@ export async function runSimulateForAnalyze(
 
   const command = `cre workflow simulate chainguard-sentinel -T local-simulation -e .env`;
 
+  // #region agent log
+  const diag = {
+    CRE_PROJECT_PATH,
+    configDirExists: fs.existsSync(configDir),
+    creProjectExists: fs.existsSync(CRE_PROJECT_PATH),
+    cwd: process.cwd(),
+    creInPath: "unknown" as string,
+  };
+  try {
+    const whichOut = execSync("which cre 2>/dev/null || echo NOT_FOUND", { encoding: "utf-8", timeout: 2000 }).trim();
+    diag.creInPath = whichOut === "NOT_FOUND" || !whichOut ? "NOT_FOUND" : whichOut;
+  } catch {
+    diag.creInPath = "ERROR_CHECKING";
+  }
+  fetch("http://127.0.0.1:7346/ingest/d42ab9c2-2ff7-4dad-bbd4-0132f7c8fca3",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"8feba7"},body:JSON.stringify({sessionId:"8feba7",location:"run-simulate.ts:preExec",message:"CRE pre-flight diagnostics",data:diag,timestamp:Date.now(),hypothesisId:"H1"})}).catch(()=>{});
+  if (diag.creInPath === "NOT_FOUND" || diag.creInPath === "ERROR_CHECKING") {
+    const msg = [
+      "CRE (Chainlink Risk Engine) CLI is not installed or not in PATH.",
+      "Full Analysis requires the `cre` command. Install it with: npm install -g @chainlink/cre",
+      "In serverless/hosted deployments (e.g. Pxxl, Vercel), subprocess execution is not supported—run Full Analysis locally or use a self-hosted backend with CRE installed.",
+      `Diagnostics: cwd=${diag.cwd} CRE_PROJECT_PATH=${diag.CRE_PROJECT_PATH} projectExists=${diag.creProjectExists}`,
+    ].join(" ");
+    throw new Error(msg);
+  }
+  // #endregion
+
   let stdout = "";
   let stderr = "";
   try {
@@ -106,6 +132,7 @@ export async function runSimulateForAnalyze(
     stdout = err.stdout || "";
     stderr = err.stderr || "";
     console.error("CRE exec failed", err);
+    fetch("http://127.0.0.1:7346/ingest/d42ab9c2-2ff7-4dad-bbd4-0132f7c8fca3",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"8feba7"},body:JSON.stringify({sessionId:"8feba7",location:"run-simulate.ts:execCatch",message:"CRE exec failed",data:{error:err?.message,stdout:typeof stdout==="string"?stdout?.slice(0,200):"",stderr:typeof stderr==="string"?stderr?.slice(0,200):""},timestamp:Date.now(),hypothesisId:"H2"})}).catch(()=>{});
     throw new Error(err?.message || "CRE simulation failed");
   }
 
