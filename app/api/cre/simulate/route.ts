@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { buildCREConfigFromDiscovery, chainSelectorToNetwork } from "@/lib/cre/build-config";
 import { runPostCREAnalysis } from "@/lib/cre/post-cre-ai";
+import { getCronSchedule } from "@/lib/scan-interval";
 
 const execAsync = promisify(exec);
 
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
         // 1. Sync config.json with monitored contracts (or single contract for analyze)
         let currentConfig: Record<string, unknown> = {
             openRouterModel: "google/gemini-2.0-flash-001",
-            cronSchedule: "*/15 * * * *",
+            cronSchedule: getCronSchedule(),
             monitoredContracts: contractsToUse,
             gasLimit: "1000000",
             verboseLogging: true,

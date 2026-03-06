@@ -8,6 +8,7 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import { runPostCREAnalysis } from "@/lib/cre/post-cre-ai";
+import { getCronSchedule } from "@/lib/scan-interval";
 
 const execAsync = promisify(exec);
 
@@ -72,7 +73,7 @@ export async function runSimulateForAnalyze(
 
   const currentConfig: Record<string, unknown> = {
     openRouterModel: "google/gemini-2.0-flash-001",
-    cronSchedule: "*/15 * * * *",
+    cronSchedule: getCronSchedule(),
     monitoredContracts: contractsToUse,
     gasLimit: "1000000",
     verboseLogging: true,

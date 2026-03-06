@@ -337,22 +337,28 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Auto-scan all contracts every 15 minutes when tab is visible (alerts + email at detection)
+  // Auto-scan: interval from CHAINGUARD_SCAN_INTERVAL_MS or NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS (default 15 min).
+  // Set to 30000 for 30s testing. When interval ≤ 60s, polls /api/cron/scan for full flow (alerts + on-chain writes).
   useEffect(() => {
-    const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+    const raw = process.env.NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS;
+    const intervalMs = raw ? Math.max(5000, parseInt(raw, 10) || 900000) : 15 * 60 * 1000;
     let intervalId: ReturnType<typeof setInterval> | undefined;
 
     const runBackgroundScan = async () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (liveContracts.length === 0) return;
       try {
-        await runGeminiScan({ runPostCREAi: true });
+        if (intervalMs <= 60000) {
+          await fetch("/api/cron/scan", { method: "POST" });
+        } else {
+          await runGeminiScan({ runPostCREAi: true });
+        }
       } catch (e) {
         console.error("Background scan failed:", e);
       }
     };
 
-    intervalId = setInterval(runBackgroundScan, FIFTEEN_MINUTES_MS);
+    intervalId = setInterval(runBackgroundScan, intervalMs);
     return () => {
       if (intervalId) clearInterval(intervalId);
     };

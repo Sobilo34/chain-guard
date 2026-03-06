@@ -22,6 +22,18 @@ Continue building your app on:
 
 **[https://v0.app/chat/uJIsdzbyi5p](https://v0.app/chat/uJIsdzbyi5p)**
 
+## Scan interval (testing)
+
+The CRE cron runs every 15 minutes by default. For faster testing:
+
+- **Local (30s)**: Add to `.env.local`:
+  ```
+  NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS=30000
+  ```
+  With the dashboard open, `/api/cron/scan` is polled every 30s (full flow: alerts + on-chain writes).
+
+- **Vercel**: Edit `vercel.json` and change `schedule` to `"*/1 * * * *"` (every minute; Vercel minimum).
+
 ## Smart Contracts
 
 ChainGuard registry lives in **chain-guard-smart-contract**. To deploy and use the on-chain registry:
