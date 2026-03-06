@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getContracts, setContracts, setAlertEmail, getAlertEmail } from "@/lib/server-store";
+import { getContracts, setContracts, setAlertEmail, getAlertEmail } from "@/lib/contract-store";
 import type { DashboardContract } from "@/lib/api";
 
 export async function POST(req: NextRequest) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getContracts, getAlertEmail, addAlert, updateAlert } from "@/lib/server-store";
+import { getContracts, getAlertEmail, addAlert, updateAlert } from "@/lib/contract-store";
 import type { DashboardAlert } from "@/lib/api";
 
 const CRON_SECRET = process.env.CRON_SECRET;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAlerts } from "@/lib/server-store";
+import { getAlerts } from "@/lib/contract-store";
 
 export async function GET(req: NextRequest) {
   try {

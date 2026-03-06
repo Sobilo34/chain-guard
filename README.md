@@ -22,6 +22,15 @@ Continue building your app on:
 
 **[https://v0.app/chat/uJIsdzbyi5p](https://v0.app/chat/uJIsdzbyi5p)**
 
+## Smart Contracts
+
+ChainGuard registry lives in **chain-guard-smart-contract**. To deploy and use the on-chain registry:
+
+1. `cd chain-guard-smart-contract`
+2. Copy `.env.example` → `.env`; set `CHAINGUARD_REGISTRY_PRIVATE_KEY` (Sepolia deployer) and `SEPOLIA_RPC_URL`
+3. Run `./deploy.sh` (or `source .env && forge script script/Deploy.s.sol --rpc-url "$SEPOLIA_RPC_URL" --broadcast`)
+4. Add the deployed address to `chain-guard/.env.local`: `CHAINGUARD_REGISTRY_ADDRESS=0x...`, plus `CHAINGUARD_REGISTRY_PRIVATE_KEY` and `SEPOLIA_RPC_URL`
+
 ## How It Works
 
 1. Create and modify your project using [v0.app](https://v0.app)
