@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { buildCREConfigFromDiscovery } from "@/lib/cre/build-config";
 import { runDiscovery } from "@/lib/cre/run-discovery";
+import { runSimulateForAnalyze } from "@/lib/cre/run-simulate";
 
 function isMainnet(network: string): boolean {
   const n = (network || "").toLowerCase();
@@ -211,19 +212,14 @@ export async function POST(req: NextRequest) {
           riskThresholds: entry.riskThresholds,
           priceFeeds: entry.priceFeeds,
         };
-        const simulateUrl = `${origin}/api/cre/simulate`;
-        const simulateRes = await fetch(simulateUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ analyzeContract }),
-        });
-        if (!simulateRes.ok) {
-          const errText = await simulateRes.text();
-          push(sseLine({ type: "error", message: `CRE simulation failed: ${errText}` }));
+        let simulateData: { assessments: any[] };
+        try {
+          simulateData = await runSimulateForAnalyze(analyzeContract, false);
+        } catch (simErr: any) {
+          push(sseLine({ type: "error", message: `CRE simulation failed: ${simErr?.message || "unknown error"}` }));
           controller.close();
           return;
         }
-        const simulateData = await simulateRes.json();
         const assessments = simulateData.assessments || [];
         const creObservation = assessments[0] || null;
 
