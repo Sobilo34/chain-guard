@@ -300,6 +300,44 @@ export function getNetworkFromContract(contract: DashboardContract): string {
   return "ethereumMainnet";
 }
 
+/** Payload for enriching on-chain CRE summary into full finalAnalysis (non-blocking). */
+export type EnrichCREPayload = {
+  summary: string;
+  riskLevel: string;
+  riskScore: string;
+  contractAddress: string;
+  chainSelectorName?: string;
+  contractName?: string;
+};
+
+/** Response from POST /api/cre/enrich — merged into result.finalAnalysis. */
+export type EnrichFinalAnalysis = {
+  summary?: string;
+  keyFindings?: string[];
+  comparisonWithPreCRE?: string;
+  rootCause?: string;
+  potentialImpact?: string;
+  recommendations?: string[];
+  nextSteps?: string[];
+  suggestedActions?: string[];
+};
+
+/** Enrich on-chain CRE result with detailed report (executive summary, root cause, recommendations). Call after applying on-chain result; does not block. */
+export async function enrichCREOnchainResult(
+  payload: EnrichCREPayload
+): Promise<EnrichFinalAnalysis> {
+  const res = await fetch(`${API_BASE_URL}/enrich`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string })?.error || `Enrich failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Apply a full analysis result to contract storage (used by Force Scan and by contract detail page). */
 export function applyAnalyzeResultToStorage(
   contractAddress: string,

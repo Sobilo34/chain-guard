@@ -80,6 +80,7 @@ import {
   getContractDetail,
   isGenericOrUnknownContractName,
   getChainSelectorNameFromContract,
+  enrichCREOnchainResult,
   type AnalyzeResult,
   type NeedMoreInfoQuestion,
 } from "@/lib/api";
@@ -290,7 +291,7 @@ export default function ContractDetailPage({
       lastRequestIdLogRef.current = false;
   }, [analysisStage]);
 
-  // When Full Analysis fell back to on-chain CRE and the assessment is in, apply it and close modal.
+  // When Full Analysis got on-chain CRE result: wait for comprehensive report (enrich), then update UI once.
   useEffect(() => {
     if (
       !analysisFallbackToOnchain ||
@@ -299,19 +300,63 @@ export default function ContractDetailPage({
     )
       return;
     const result = analyzeResultFromOnchainAssessment(creAssessment);
-    applyAnalysisResult(result);
-    setAnalysisStage("complete");
+    const addr = (data?.address || "").toLowerCase().trim();
+    const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
+    if (!with0x || with0x === "0x") return;
+
     setAnalysisLogLines((prev) =>
-      prev[prev.length - 1] === "Done. Analysis saved."
+      prev[prev.length - 1] === "Preparing comprehensive report…"
         ? prev
-        : [...prev, "Done. Analysis saved."],
+        : [...prev, "Preparing comprehensive report…"],
     );
-    setAnalysisFallbackToOnchain(false);
-    toast.success("Full analysis complete (on-chain CRE)", {
-      description:
-        "Analysis saved from Chainlink CRE. It will persist until you run another.",
-    });
-    setTimeout(() => setAnalysisModalOpen(false), 2200);
+
+    enrichCREOnchainResult({
+      summary: creAssessment.summary,
+      riskLevel: creAssessment.riskLevelLabel,
+      riskScore: String(creAssessment.riskScore),
+      contractAddress: with0x,
+      chainSelectorName: data?.chainSelectorName || undefined,
+      contractName: data?.name || undefined,
+    })
+      .then((enriched) => {
+        const mergedFinal = {
+          ...result.finalAnalysis,
+          ...enriched,
+        };
+        const mergedResult: AnalyzeResult = {
+          ...result,
+          finalAnalysis: mergedFinal,
+        };
+        applyAnalysisResult(mergedResult);
+        setAnalysisStage("complete");
+        setAnalysisLogLines((prev) =>
+          prev[prev.length - 1] === "Done. Analysis saved."
+            ? prev
+            : [...prev, "Done. Analysis saved."],
+        );
+        setAnalysisFallbackToOnchain(false);
+        toast.success("Full analysis complete (on-chain CRE)", {
+          description:
+            "Comprehensive report saved. Root cause, impact, and recommendations are included.",
+        });
+        setTimeout(() => setAnalysisModalOpen(false), 2200);
+      })
+      .catch(() => {
+        // Enrich failed; save minimal on-chain result so user still has something.
+        applyAnalysisResult(result);
+        setAnalysisStage("complete");
+        setAnalysisLogLines((prev) =>
+          prev[prev.length - 1] === "Done. Analysis saved."
+            ? prev
+            : [...prev, "Done. Analysis saved."],
+        );
+        setAnalysisFallbackToOnchain(false);
+        toast.success("Analysis saved (on-chain CRE)", {
+          description:
+            "Detailed report could not be loaded. Add OPENROUTER_API_KEY to .env.local for full report.",
+        });
+        setTimeout(() => setAnalysisModalOpen(false), 2200);
+      });
   }, [analysisFallbackToOnchain, analysisStage, creAssessment]);
 
   const handleRequestOnchainCRE = () => {
@@ -462,7 +507,7 @@ export default function ContractDetailPage({
     }
   }, [analysisLogLines]);
 
-  /** Build full AnalyzeResult from on-chain CRE assessment. Parses comprehensive JSON summary from CRE. */
+  /** Build a minimal AnalyzeResult from on-chain CRE assessment so we can reuse applyAnalysisResult. */
   const analyzeResultFromOnchainAssessment = (
     a: OnchainAssessment,
   ): AnalyzeResult & {
@@ -471,40 +516,16 @@ export default function ContractDetailPage({
       symbol: string;
       decimals?: number;
     }>;
-  } => {
-    let finalAnalysis: AnalyzeResult["finalAnalysis"] = { summary: a.summary };
-    try {
-      const raw = (a.summary || "").trim();
-      if (raw.startsWith("{")) {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        if (parsed && typeof parsed === "object" && typeof parsed.summary === "string") {
-          finalAnalysis = {
-            summary: String(parsed.summary),
-            rootCause: typeof parsed.rootCause === "string" ? parsed.rootCause : undefined,
-            potentialImpact: typeof parsed.potentialImpact === "string" ? parsed.potentialImpact : undefined,
-            recommendations: Array.isArray(parsed.recommendations)
-              ? (parsed.recommendations as string[]).filter((x): x is string => typeof x === "string")
-              : undefined,
-            keyFindings: Array.isArray(parsed.keyFindings)
-              ? (parsed.keyFindings as string[]).filter((x): x is string => typeof x === "string")
-              : undefined,
-          };
-        }
-      }
-    } catch {
-      // Not JSON or invalid: keep summary-only fallback
-    }
-    return {
-      contractContext: {},
-      initialAnalysis: { summary: a.summary },
-      creObservations: {
-        riskLevel: a.riskLevelLabel,
-        riskScore: a.riskScore,
-        latestScan: { reasoning: finalAnalysis.summary ?? a.summary },
-      },
-      finalAnalysis,
-    };
-  };
+  } => ({
+    contractContext: {},
+    initialAnalysis: { summary: a.summary },
+    creObservations: {
+      riskLevel: a.riskLevelLabel,
+      riskScore: a.riskScore,
+      latestScan: { reasoning: a.summary },
+    },
+    finalAnalysis: { summary: a.summary },
+  });
 
   const applyAnalysisResult = (
     result: AnalyzeResult & {
@@ -954,7 +975,7 @@ export default function ContractDetailPage({
                     </div>
                     <div>
                       <h2 className="text-xl font-black tracking-tight text-foreground">
-                        Full Analysis
+                        Run Full Analysis
                       </h2>
                       <p className="text-xs text-muted-foreground font-medium">
                         On-chain CRE — same behavior locally and in production
@@ -1225,7 +1246,7 @@ export default function ContractDetailPage({
                         {analysisError.includes("Switch network") ||
                         analysisError.includes("chain")
                           ? `Full Analysis uses the CRE consumer contract on ${creChainName}. Switch your wallet to ${creChainName}, then run Full Analysis again.`
-                          : "Something went wrong. You can try again or use Request onchain (CRE) from the contract page."}
+                          : "Something went wrong. You can try again or run full analysis again."}
                       </p>
                       <div className="flex flex-wrap gap-2">
                         {(analysisError.includes("Switch network") ||
@@ -1404,7 +1425,7 @@ export default function ContractDetailPage({
             animate={{ opacity: 1, scale: 1 }}
             className="flex flex-col gap-2"
           >
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 variant="outline"
                 disabled={analyzeLoading}
@@ -1418,187 +1439,159 @@ export default function ContractDetailPage({
                     analyzeLoading && "animate-pulse",
                   )}
                 />
-                {analyzeLoading ? "Analyzing…" : "Full Analysis"}
+                {analyzeLoading ? "Analyzing…" : "Run Full Analysis"}
               </Button>
-              <Button
-                variant="outline"
-                disabled={creRequestPending || !isCREChain}
-                onClick={handleRequestOnchainCRE}
-                className="h-12 rounded-[1.25rem] border-primary/40 bg-primary/5 font-bold backdrop-blur-xl"
-                title={
-                  !isCREChain
-                    ? `Switch to chain ${CRE_CONSUMER_CHAIN_ID} (e.g. Sepolia) to request onchain CRE analysis`
-                    : "Same on-chain request; result appears below when ready (no modal)."
-                }
+              <Dialog
+                open={tuningOpen}
+                onOpenChange={(open) => {
+                  setTuningOpen(open);
+                  if (open && data?.riskThresholds)
+                    setThresholdForm({
+                      ...DEFAULT_RISK_THRESHOLDS,
+                      ...data.riskThresholds,
+                    });
+                }}
               >
-                <Zap
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    creRequestPending && "animate-pulse",
-                  )}
-                />
-                {creRequestPending ? "Requesting…" : "Request onchain (CRE)"}
-              </Button>
-            </div>
-            {creError && <p className="text-xs text-destructive">{creError}</p>}
-            {lastRequestId && !creAssessment && (
-              <span className="text-xs text-muted-foreground">
-                CRE processing… (usually 1–2 min) requestId:{" "}
-                {lastRequestId.slice(0, 10)}…
-              </span>
-            )}
-            {creAssessment && (
-              <span className="text-xs font-medium text-emerald-600">
-                Onchain: {creAssessment.riskLevelLabel} —{" "}
-                {String(creAssessment.riskScore)} —{" "}
-                {creAssessment.summary.slice(0, 60)}…
-              </span>
-            )}
-            <Dialog
-              open={tuningOpen}
-              onOpenChange={(open) => {
-                setTuningOpen(open);
-                if (open && data?.riskThresholds)
-                  setThresholdForm({
-                    ...DEFAULT_RISK_THRESHOLDS,
-                    ...data.riskThresholds,
-                  });
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Tuning
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md rounded-2xl border-border/40 bg-card/80 backdrop-blur-xl">
-                <DialogHeader>
-                  <DialogTitle className="text-lg font-black">
-                    CRE thresholds
-                  </DialogTitle>
-                  <p className="text-sm text-muted-foreground">
-                    These values are used when triggering the Chainlink Risk
-                    Engine for this contract. Sensible defaults are set; you can
-                    adjust them per contract.
-                  </p>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">
-                      Depeg tolerance (0–0.1)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={0.001}
-                      max={0.1}
-                      step={0.001}
-                      value={thresholdForm.depegTolerance}
-                      onChange={(e) =>
-                        setThresholdForm((p) => ({
-                          ...p,
-                          depegTolerance: Math.max(
-                            0.001,
-                            Math.min(0.1, Number(e.target.value) || 0.02),
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">
-                      Volatility max (0.05–0.5)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={0.05}
-                      max={0.5}
-                      step={0.01}
-                      value={thresholdForm.volatilityMax}
-                      onChange={(e) =>
-                        setThresholdForm((p) => ({
-                          ...p,
-                          volatilityMax: Math.max(
-                            0.05,
-                            Math.min(0.5, Number(e.target.value) || 0.15),
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">
-                      Liquidity drop max (0.1–0.5)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={0.1}
-                      max={0.5}
-                      step={0.01}
-                      value={thresholdForm.liquidityDropMax}
-                      onChange={(e) =>
-                        setThresholdForm((p) => ({
-                          ...p,
-                          liquidityDropMax: Math.max(
-                            0.1,
-                            Math.min(0.5, Number(e.target.value) || 0.25),
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">
-                      Collateral ratio min (1.0–3.0)
-                    </Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={3}
-                      step={0.1}
-                      value={thresholdForm.collateralRatioMin}
-                      onChange={(e) =>
-                        setThresholdForm((p) => ({
-                          ...p,
-                          collateralRatioMin: Math.max(
-                            1,
-                            Math.min(3, Number(e.target.value) || 1.5),
-                          ),
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
+                <DialogTrigger asChild>
                   <Button
                     variant="outline"
-                    onClick={() => setTuningOpen(false)}
+                    className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
                   >
-                    Cancel
+                    <Settings className="mr-2 h-4 w-4" />
+                    Tuning
                   </Button>
-                  <Button
-                    onClick={() => {
-                      const addr = (data?.address || "").toLowerCase().trim();
-                      const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
-                      ContractStorage.updateContract(with0x, {
-                        riskThresholds: { ...thresholdForm },
-                      });
-                      setData((p: any) =>
-                        p ? { ...p, riskThresholds: { ...thresholdForm } } : p,
-                      );
-                      setTuningOpen(false);
-                      toast.success(
-                        "CRE thresholds updated for this contract.",
-                      );
-                    }}
-                  >
-                    Save
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md rounded-2xl border-border/40 bg-card/80 backdrop-blur-xl">
+                  <DialogHeader>
+                    <DialogTitle className="text-lg font-black">
+                      CRE thresholds
+                    </DialogTitle>
+                    <p className="text-sm text-muted-foreground">
+                      These values are used when triggering the Chainlink Risk
+                      Engine for this contract. Sensible defaults are set; you
+                      can adjust them per contract.
+                    </p>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">
+                        Depeg tolerance (0–0.1)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={0.001}
+                        max={0.1}
+                        step={0.001}
+                        value={thresholdForm.depegTolerance}
+                        onChange={(e) =>
+                          setThresholdForm((p) => ({
+                            ...p,
+                            depegTolerance: Math.max(
+                              0.001,
+                              Math.min(0.1, Number(e.target.value) || 0.02),
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">
+                        Volatility max (0.05–0.5)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={0.05}
+                        max={0.5}
+                        step={0.01}
+                        value={thresholdForm.volatilityMax}
+                        onChange={(e) =>
+                          setThresholdForm((p) => ({
+                            ...p,
+                            volatilityMax: Math.max(
+                              0.05,
+                              Math.min(0.5, Number(e.target.value) || 0.15),
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">
+                        Liquidity drop max (0.1–0.5)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={0.1}
+                        max={0.5}
+                        step={0.01}
+                        value={thresholdForm.liquidityDropMax}
+                        onChange={(e) =>
+                          setThresholdForm((p) => ({
+                            ...p,
+                            liquidityDropMax: Math.max(
+                              0.1,
+                              Math.min(0.5, Number(e.target.value) || 0.25),
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label className="text-xs font-bold uppercase text-muted-foreground">
+                        Collateral ratio min (1.0–3.0)
+                      </Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={3}
+                        step={0.1}
+                        value={thresholdForm.collateralRatioMin}
+                        onChange={(e) =>
+                          setThresholdForm((p) => ({
+                            ...p,
+                            collateralRatioMin: Math.max(
+                              1,
+                              Math.min(3, Number(e.target.value) || 1.5),
+                            ),
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setTuningOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const addr = (data?.address || "").toLowerCase().trim();
+                        const with0x = addr.startsWith("0x")
+                          ? addr
+                          : `0x${addr}`;
+                        ContractStorage.updateContract(with0x, {
+                          riskThresholds: { ...thresholdForm },
+                        });
+                        setData((p: any) =>
+                          p
+                            ? { ...p, riskThresholds: { ...thresholdForm } }
+                            : p,
+                        );
+                        setTuningOpen(false);
+                        toast.success(
+                          "CRE thresholds updated for this contract.",
+                        );
+                      }}
+                    >
+                      Save
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
             {(() => {
               const chain = data?.chain || "";
               const addr = (data?.address || "").trim();
@@ -1714,15 +1707,15 @@ export default function ContractDetailPage({
                       <Sparkles className="h-7 w-7" />
                     </div>
                     <p className="text-sm font-semibold text-foreground max-w-md">
-                      No analysis yet. Run <strong>Full Analysis</strong> to
-                      start monitoring this contract.
+                      No analysis yet. Click <strong>Run Full Analysis</strong>{" "}
+                      to start monitoring this contract.
                     </p>
                     <Button
                       onClick={handleFullAnalysis}
                       disabled={analyzeLoading}
                       className="rounded-xl font-bold"
                     >
-                      {analyzeLoading ? "Analyzing…" : "Full Analysis"}
+                      {analyzeLoading ? "Analyzing…" : "Run Full Analysis"}
                     </Button>
                   </div>
                 </div>
@@ -2084,7 +2077,7 @@ export default function ContractDetailPage({
             <CardHeader className="border-b border-border/40 px-8 py-6">
               <CardTitle className="flex items-center gap-2 text-xl font-black tracking-tight">
                 <Sparkles className="h-5 w-5 text-primary" />
-                Full Analysis
+                Run Full Analysis
               </CardTitle>
               <CardDescription className="text-xs font-medium text-muted-foreground">
                 Pre-CRE AI analysis, CRE observations, and post-CRE AI analysis
@@ -2101,9 +2094,11 @@ export default function ContractDetailPage({
                     Pre-CRE analysis (AI from contract context)
                   </AccordionTrigger>
                   <AccordionContent className="pb-4 text-sm text-muted-foreground space-y-3">
-                    {analyzeResult.initialAnalysis?.summary && (
-                      <p className="leading-relaxed">
-                        {analyzeResult.initialAnalysis.summary}
+                    {(analyzeResult.finalAnalysis?.summary ||
+                      analyzeResult.initialAnalysis?.summary) && (
+                      <p className="leading-relaxed whitespace-pre-wrap break-words">
+                        {analyzeResult.finalAnalysis?.summary ||
+                          analyzeResult.initialAnalysis?.summary}
                       </p>
                     )}
                     {analyzeResult.initialAnalysis?.keyRisks?.length ? (
