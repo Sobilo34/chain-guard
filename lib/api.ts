@@ -267,6 +267,20 @@ export function isGenericOrUnknownContractName(name: string | undefined): boolea
   );
 }
 
+/** Derive CRE chain selector name from dashboard contract (for onchain request). */
+export function getChainSelectorNameFromContract(contract: { chain?: string; chainSelectorName?: string }): string {
+  const sel = (contract.chainSelectorName || "").toLowerCase();
+  if (sel && (sel.includes("ethereum") || sel.includes("arbitrum") || sel.includes("optimism") || sel.includes("base") || sel.includes("polygon"))) {
+    return contract.chainSelectorName!;
+  }
+  const chain = (contract.chain || "").toLowerCase();
+  if (chain.includes("arbitrum") && !chain.includes("sepolia")) return "arbitrum-mainnet";
+  if (chain.includes("optimism") && !chain.includes("sepolia")) return "optimism-mainnet";
+  if (chain.includes("base") && !chain.includes("sepolia")) return "base-mainnet";
+  if (chain.includes("polygon") && !chain.includes("amoy")) return "polygon-mainnet";
+  return "ethereum-mainnet";
+}
+
 /** Derive analyze API network string from a dashboard contract (chainSelectorName / chain). */
 export function getNetworkFromContract(contract: DashboardContract): string {
   const chain = (contract as any).chain;

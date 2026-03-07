@@ -7,6 +7,7 @@ import {
   arbitrum,
   polygon,
   optimism,
+  sepolia,
   type AppKitNetwork,
 } from "@reown/appkit/networks";
 import {
@@ -31,12 +32,13 @@ const metadata = {
   icons: ["https://avatars.githubusercontent.com/u/179229932"],
 };
 
-// 3. Set the networks
+// 3. Set the networks (Sepolia = CRE consumer for onchain risk analysis)
 const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   mainnet,
   arbitrum,
   polygon,
   optimism,
+  sepolia,
 ];
 
 // 4. Create Wagmi Adapter

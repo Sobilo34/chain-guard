@@ -4,6 +4,7 @@ import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 import { buildCREConfigFromDiscovery, chainSelectorToNetwork } from "@/lib/cre/build-config";
+import { isServerlessProduction, CRE_NOT_AVAILABLE_MESSAGE } from "@/lib/cre/serverless-check";
 import { runPostCREAnalysis } from "@/lib/cre/post-cre-ai";
 import { getCronSchedule } from "@/lib/scan-interval";
 
@@ -142,6 +143,13 @@ export async function POST(req: NextRequest) {
             );
         }
 
+        if (isServerlessProduction()) {
+            return NextResponse.json({
+                error: CRE_NOT_AVAILABLE_MESSAGE,
+                code: "CRE_NOT_AVAILABLE",
+            }, { status: 503 });
+        }
+
         // 1. Sync config.json with monitored contracts (or single contract for analyze)
         let currentConfig: Record<string, unknown> = {
             openRouterModel: "google/gemini-2.0-flash-001",
@@ -182,7 +190,7 @@ export async function POST(req: NextRequest) {
         }
         if (creInPath === "NOT_FOUND" || creInPath === "ERROR_CHECKING") {
             return NextResponse.json({
-                error: "CRE (Chainlink Risk Engine) CLI is not installed or not in PATH. Full Analysis and cron scans require the `cre` command. Install with: npm install -g @chainlink/cre. In serverless/hosted deployments (Pxxl, Vercel), subprocess execution is not supported—run locally or use a self-hosted backend with CRE installed.",
+                error: CRE_NOT_AVAILABLE_MESSAGE,
                 code: "CRE_NOT_FOUND",
             }, { status: 503 });
         }
@@ -276,9 +284,14 @@ export async function POST(req: NextRequest) {
 
     } catch (error: any) {
         console.error("CRE Simulation failed", error);
+        const errMsg = error?.message || "CRE simulation failed";
+        const friendlyError = (errMsg.includes("cre: not found") || errMsg.includes("cre: command not found"))
+            ? "CRE (Chainlink Risk Engine) CLI is not installed or not in PATH. Install with: npm install -g @chainlink/cre. In serverless/hosted deployments (Pxxl, Vercel), run Full Analysis locally or use a self-hosted backend with CRE installed."
+            : errMsg;
         return NextResponse.json({
             success: false,
-            error: error.message,
+            error: friendlyError,
+            code: (errMsg.includes("cre: not found") || errMsg.includes("cre: command not found")) ? "CRE_NOT_FOUND" : undefined,
             stdout: error.stdout,
             stderr: error.stderr,
         }, { status: 500 });

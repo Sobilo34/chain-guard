@@ -76,8 +76,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getContractDetail, runAnalyzeStream, isGenericOrUnknownContractName, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
+import { getContractDetail, runAnalyzeStream, isGenericOrUnknownContractName, getNetworkFromContract, getChainSelectorNameFromContract, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
+import { useAccount } from "wagmi";
+import { useRequestCREAnalysis, useCREAssessment } from "@/hooks/use-cre-onchain";
+import { CRE_CONSUMER_CHAIN_ID } from "@/lib/cre-consumer";
 import { getBlockscoutAddressUrl } from "@/lib/cre/explorer-api";
 import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent, formatSyncTime } from "@/lib/format-metrics";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
@@ -138,6 +141,44 @@ export default function ContractDetailPage({
   } | null>(null);
   const [needMoreInfoFormValues, setNeedMoreInfoFormValues] = useState<Record<string, string>>({});
   const [liveMetrics, setLiveMetrics] = useState<{ tvl?: number; price?: number; volume24h?: number | null; liquidity?: number | null } | null>(null);
+
+  const chainSelectorName = data ? getChainSelectorNameFromContract(data) : "ethereum-mainnet";
+  const {
+    requestAnalysis: requestCREAnalysis,
+    isPending: creRequestPending,
+    isSuccess: creRequestSuccess,
+    lastRequestId,
+    reset: resetCRERequest,
+  } = useRequestCREAnalysis();
+  const { assessment: creAssessment, refetch: refetchCREAssessment } = useCREAssessment(lastRequestId);
+  const [creError, setCreError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lastRequestId) return;
+    const t = setInterval(() => refetchCREAssessment(), 8000);
+    return () => clearInterval(t);
+  }, [lastRequestId, refetchCREAssessment]);
+
+  const handleRequestOnchainCRE = () => {
+    if (!data?.address) return;
+    setCreError(null);
+    resetCRERequest();
+    requestCREAnalysis(data.address, chainSelectorName).catch((e: any) => {
+      setCreError(e?.message || "Request failed");
+      toast.error("CRE request failed", { description: e?.message });
+    });
+  };
+
+  useEffect(() => {
+    if (creRequestSuccess && lastRequestId) {
+      toast.success("Request submitted onchain", {
+        description: "CRE workflow will process and write the result onchain. You can poll for the result.",
+      });
+    }
+  }, [creRequestSuccess, lastRequestId]);
+
+  const { chain } = useAccount();
+  const isCREChain = chain?.id === CRE_CONSUMER_CHAIN_ID;
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -824,6 +865,25 @@ export default function ContractDetailPage({
             <Sparkles className={cn("mr-2 h-4 w-4", analyzeLoading && "animate-pulse")} />
             {analyzeLoading ? "Analyzing…" : "Full Analysis"}
           </Button>
+          <Button
+            variant="outline"
+            disabled={creRequestPending || !isCREChain}
+            onClick={handleRequestOnchainCRE}
+            className="h-12 rounded-[1.25rem] border-primary/40 bg-primary/5 font-bold backdrop-blur-xl"
+            title={!isCREChain ? `Switch to chain ${CRE_CONSUMER_CHAIN_ID} (e.g. Sepolia) to request onchain CRE analysis` : "Request risk analysis onchain via Chainlink CRE"}
+          >
+            <Zap className={cn("mr-2 h-4 w-4", creRequestPending && "animate-pulse")} />
+            {creRequestPending ? "Requesting…" : "Request onchain (CRE)"}
+          </Button>
+          {creError && <p className="text-xs text-destructive">{creError}</p>}
+          {lastRequestId && !creAssessment && (
+            <span className="text-xs text-muted-foreground">CRE processing… (requestId: {lastRequestId.slice(0, 10)}…)</span>
+          )}
+          {creAssessment && (
+            <span className="text-xs font-medium text-emerald-600">
+              Onchain: {creAssessment.riskLevelLabel} — {String(creAssessment.riskScore)} — {creAssessment.summary.slice(0, 60)}…
+            </span>
+          )}
           <Dialog open={tuningOpen} onOpenChange={(open) => {
             setTuningOpen(open);
             if (open && data?.riskThresholds) setThresholdForm({ ...DEFAULT_RISK_THRESHOLDS, ...data.riskThresholds });
