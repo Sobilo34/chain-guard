@@ -315,7 +315,7 @@ export default function DashboardPage() {
           const alertsRes = await fetch("/api/alerts?limit=3");
           if (alertsRes.ok) {
             const json = await alertsRes.json();
-            if (Array.isArray(json.alerts) && json.alerts.length > 0) {
+            if (Array.isArray(json.alerts)) {
               setLiveAlerts(json.alerts);
             }
           }
@@ -339,8 +339,9 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // Auto-scan: interval from CHAINGUARD_SCAN_INTERVAL_MS or NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS (default 15 min).
-  // Set to 30000 for 30s testing. When interval ≤ 60s, polls /api/cron/scan for full flow (alerts + on-chain writes).
+  // Auto-scan at interval: always use /api/cron/scan so the contract list comes from the on-chain registry
+  // (all contracts added in the frontend and synced are scanned). Alerts and contract updates applied server-side.
+  // For 24/7 scanning when the tab is closed, set up Vercel Cron (or similar) to POST /api/cron/scan at this interval.
   useEffect(() => {
     const raw = process.env.NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS;
     const intervalMs = raw ? Math.max(5000, parseInt(raw, 10) || 900000) : 15 * 60 * 1000;
@@ -350,20 +351,15 @@ export default function DashboardPage() {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (liveContracts.length === 0) return;
       try {
-        if (intervalMs <= 60000) {
-          const cronRes = await fetch("/api/cron/scan", { method: "POST" });
-          if (cronRes.ok) {
-            const syncRes = await fetch("/api/sync");
-            if (syncRes.ok) {
-              const { contracts } = await syncRes.json();
-              if (Array.isArray(contracts) && contracts.length > 0) {
-                ContractStorage.saveContracts(contracts);
-              }
+        const cronRes = await fetch("/api/cron/scan", { method: "POST" });
+        if (cronRes.ok) {
+          const syncRes = await fetch("/api/sync");
+          if (syncRes.ok) {
+            const { contracts } = await syncRes.json();
+            if (Array.isArray(contracts) && contracts.length > 0) {
+              ContractStorage.saveContracts(contracts);
             }
-            refreshRef.current?.();
           }
-        } else {
-          await runGeminiScan({ runPostCREAi: true });
           refreshRef.current?.();
         }
       } catch (e) {
@@ -930,23 +926,45 @@ export default function DashboardPage() {
         >
           <Card className="flex h-full flex-col rounded-2xl border-border/40 bg-card/40 backdrop-blur-xl">
             <CardHeader className="px-5 py-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-base font-bold tracking-tight">
                   Active Sentinel
                 </CardTitle>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[10px] font-bold uppercase",
-                    liveAlerts.filter((a) => a.status === "active").length > 0
-                      ? "animate-pulse border-rose-500/30 bg-rose-500/5 text-rose-500"
-                      : "border-muted-foreground/30 bg-muted/20 text-muted-foreground",
+                <div className="flex items-center gap-2">
+                  {liveAlerts.filter((a) => a.status === "active").length > 0 ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[10px] font-bold uppercase h-7 px-2.5 border-rose-500/30 bg-rose-500/5 text-rose-500 hover:bg-rose-500/10"
+                      onClick={async () => {
+                        try {
+                          const res = await fetch("/api/alerts/clear-dashboard", { method: "POST" });
+                          const data = await res.json().catch(() => ({}));
+                          if (res.ok && data.success) {
+                            toast.success("Dashboard cleared", {
+                              description: data.acknowledged
+                                ? `${data.acknowledged} alert(s) marked acknowledged. They remain in Alert Feeds.`
+                                : "Active Sentinel is clear.",
+                            });
+                            refreshRef.current?.();
+                          }
+                        } catch (e) {
+                          console.error("Clear dashboard failed", e);
+                          toast.error("Failed to clear dashboard");
+                        }
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-bold uppercase border-muted-foreground/30 bg-muted/20 text-muted-foreground"
+                    >
+                      CLEAR
+                    </Badge>
                   )}
-                >
-                  {liveAlerts.filter((a) => a.status === "active").length > 0
-                    ? `${liveAlerts.filter((a) => a.status === "active").length} ACTIVE`
-                    : "CLEAR"}
-                </Badge>
+                </div>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Real-time triggers from monitored contracts.

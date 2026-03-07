@@ -45,13 +45,7 @@ import {
   Trash2,
 } from "lucide-react";
 import * as framerMotion from "framer-motion";
-import {
-  getAlerts,
-  AlertPayload,
-  acknowledgeAlert,
-  resolveAlert,
-  deleteAlert as deleteAlertApi,
-} from "@/lib/api";
+import { getAlerts, AlertPayload } from "@/lib/api";
 
 const motion =
   (framerMotion as any).motion ||
@@ -171,16 +165,22 @@ export default function AlertsPage() {
   const handleAcknowledge = async (id: string) => {
     try {
       setActionLoading(true);
-      await acknowledgeAlert(id);
-      setData((prev: any) => ({
-        ...prev,
-        alerts: prev.alerts.map((a: any) =>
-          a.id === id ? { ...a, status: "acknowledged" } : a,
-        ),
-      }));
-      setSelectedAlert((a: any) =>
-        a?.id === id ? { ...a, status: "acknowledged" } : a,
-      );
+      const res = await fetch("/api/alerts/acknowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alertId: id }),
+      });
+      if (res.ok && (await res.json()).success) {
+        setData((prev: any) => ({
+          ...prev,
+          alerts: prev.alerts.map((a: any) =>
+            a.id === id ? { ...a, status: "acknowledged" } : a,
+          ),
+        }));
+        setSelectedAlert((a: any) =>
+          a?.id === id ? { ...a, status: "acknowledged" } : a,
+        );
+      }
     } catch (err) {
       console.error("Failed to acknowledge alert", err);
     } finally {
@@ -191,14 +191,20 @@ export default function AlertsPage() {
   const handleResolve = async (id: string) => {
     try {
       setActionLoading(true);
-      await resolveAlert(id);
-      setData((prev: any) => ({
-        ...prev,
-        alerts: prev.alerts.map((a: any) =>
-          a.id === id ? { ...a, status: "resolved" } : a,
-        ),
-      }));
-      setSelectedAlert(null);
+      const res = await fetch("/api/alerts/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alertId: id }),
+      });
+      if (res.ok && (await res.json()).success) {
+        setData((prev: any) => ({
+          ...prev,
+          alerts: prev.alerts.map((a: any) =>
+            a.id === id ? { ...a, status: "resolved" } : a,
+          ),
+        }));
+        setSelectedAlert(null);
+      }
     } catch (err) {
       console.error("Failed to resolve alert", err);
     } finally {
@@ -210,8 +216,13 @@ export default function AlertsPage() {
     e?.stopPropagation();
     try {
       setActionLoading(true);
-      const result = await deleteAlertApi(id);
-      if (result.success) {
+      const res = await fetch("/api/alerts/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ alertId: id }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result.success) {
         setData((prev: any) => ({
           ...prev,
           alerts: prev.alerts.filter((a: any) => a.id !== id),

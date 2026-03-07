@@ -157,19 +157,22 @@ export async function updateContractFromScan(
 interface AlertsCache {
   alerts: Record<string, Partial<DashboardAlert>>;
   bytes32ToId: Record<string, string>;
+  /** Soft-deleted alert IDs: hidden from dashboard and Alert Feeds (deleted in feed = gone everywhere) */
+  deletedAlertIds?: string[];
 }
 
 function readAlertsCache(): AlertsCache {
   ensureDir(DATA_DIR);
-  if (!fs.existsSync(ALERTS_CACHE_PATH)) return { alerts: {}, bytes32ToId: {} };
+  if (!fs.existsSync(ALERTS_CACHE_PATH)) return { alerts: {}, bytes32ToId: {}, deletedAlertIds: [] };
   try {
     const raw = JSON.parse(fs.readFileSync(ALERTS_CACHE_PATH, "utf-8"));
     return {
       alerts: raw.alerts || {},
       bytes32ToId: raw.bytes32ToId || {},
+      deletedAlertIds: Array.isArray(raw.deletedAlertIds) ? raw.deletedAlertIds : [],
     };
   } catch {
-    return { alerts: {}, bytes32ToId: {} };
+    return { alerts: {}, bytes32ToId: {}, deletedAlertIds: [] };
   }
 }
 
@@ -348,10 +351,12 @@ export async function getAlerts(): Promise<DashboardAlert[]> {
   });
 
   const cache = readAlertsCache();
+  const deletedSet = new Set(cache.deletedAlertIds || []);
   const result: DashboardAlert[] = [];
   for (let i = 0; i < ids.length; i++) {
     const idBytesHex = ids[i]?.toString() || "";
     const idStr = cache.bytes32ToId[idBytesHex] ?? idBytesHex;
+    if (deletedSet.has(idStr)) continue;
     const cached = cache.alerts[idStr] || {};
     result.push({
       id: cached.id ?? idStr,
@@ -452,4 +457,22 @@ export async function updateAlert(alertId: string, updates: Partial<DashboardAle
   }
 
   return merged;
+}
+
+/** Soft-delete an alert: hidden from dashboard and Alert Feeds. Contract has no remove, so we only update cache. */
+export async function deleteAlert(alertId: string): Promise<boolean> {
+  if (!useOnChainRegistry()) {
+    const { getAlerts: getFs, saveAlerts: saveFs } = await import("./server-store");
+    const alerts = await getFs();
+    const filtered = alerts.filter((a) => a.id !== alertId);
+    if (filtered.length === alerts.length) return false;
+    await saveFs(filtered);
+    return true;
+  }
+  const cache = readAlertsCache();
+  if (!cache.deletedAlertIds) cache.deletedAlertIds = [];
+  if (cache.deletedAlertIds.includes(alertId)) return true;
+  cache.deletedAlertIds.push(alertId);
+  writeAlertsCache(cache);
+  return true;
 }
