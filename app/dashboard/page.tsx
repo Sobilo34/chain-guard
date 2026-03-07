@@ -270,7 +270,7 @@ export default function DashboardPage() {
           {
             title: "Monitored Contracts",
             value: `${data.kpis.monitoredContracts}`,
-            change: "Live from bridge API",
+            change: "Live data",
             icon: FileCode2,
             color: "text-primary",
             bgColor: "bg-primary/10",
@@ -450,7 +450,7 @@ export default function DashboardPage() {
       const d = res?.data;
       if (d) {
         setLiveKpis([
-          { title: "Monitored Contracts", value: `${d.kpis.monitoredContracts}`, change: "Live from bridge API", icon: FileCode2, color: "text-primary", bgColor: "bg-primary/10" },
+          { title: "Monitored Contracts", value: `${d.kpis.monitoredContracts}`, change: "Live data", icon: FileCode2, color: "text-primary", bgColor: "bg-primary/10" },
           { title: "Active Alerts", value: `${d.kpis.activeAlerts}`, change: `${d.kpis.activeAlerts} currently active`, icon: AlertTriangle, color: "text-danger", bgColor: "bg-danger/10" },
           { title: "Total Value Locked", value: formatTvl(d.kpis.totalValueLocked), change: "Derived from monitored contracts", icon: TrendingUp, color: "text-success", bgColor: "bg-success/10" },
           { title: "Risk Score", value: `${d.kpis.riskScore}/100`, change: d.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing", icon: ShieldCheck, color: d.kpis.riskScore >= 70 ? "text-warning" : "text-success", bgColor: d.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10" },

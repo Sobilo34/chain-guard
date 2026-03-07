@@ -96,7 +96,7 @@ export default function LoginPage() {
       localStorage.setItem("chainguard_alert_email", email);
       router.push("/dashboard");
     } catch {
-      setEmailError("Failed to save email. Check bridge API.");
+      setEmailError("Failed to save email. Please try again.");
     } finally {
       setIsSaving(false);
     }

@@ -101,7 +101,7 @@ export default function SettingsPage() {
       syncToServer({ alertEmail: email });
       setEmailStatus("Email updated successfully.");
     } catch {
-      setEmailStatus("Failed to update email. Check bridge API.");
+      setEmailStatus("Failed to update email. Please try again.");
     } finally {
       setIsSavingEmail(false);
     }
