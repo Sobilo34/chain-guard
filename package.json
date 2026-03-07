@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "script:full-analysis": "node scripts/run-full-analysis-flow.mjs",
+    "script:cre-listener": "node scripts/cre-evm-listener.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

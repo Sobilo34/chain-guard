@@ -64,11 +64,19 @@ export class ContractStorage {
     }
 
     /**
+     * JSON replacer so BigInt (e.g. from on-chain riskScore) serializes without throwing.
+     */
+    private static _jsonReplacer(_key: string, value: unknown): unknown {
+        if (typeof value === "bigint") return value.toString();
+        return value;
+    }
+
+    /**
      * Save contracts to localStorage
      */
     static saveContracts(contracts: DashboardContract[]): void {
         if (typeof window === "undefined") return;
-        localStorage.setItem(STORAGE_KEYS.CONTRACTS, JSON.stringify(contracts));
+        localStorage.setItem(STORAGE_KEYS.CONTRACTS, JSON.stringify(contracts, ContractStorage._jsonReplacer));
     }
 
     /**
