@@ -81,6 +81,7 @@ export function useRequestCREAnalysis() {
     isSuccess: isConfirmed,
     lastRequestId,
     reset,
+    txHash: hash ?? undefined,
   };
 }
 

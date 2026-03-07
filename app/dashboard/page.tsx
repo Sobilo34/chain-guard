@@ -45,7 +45,6 @@ import { useDashboardScan } from "@/app/dashboard/scan-context";
 import {
   getOverview,
   addContract,
-  runGeminiScan,
   syncToServer,
   type DashboardAlert,
   type DashboardContract,

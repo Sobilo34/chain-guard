@@ -40,7 +40,7 @@ import {
   Clock,
 } from "lucide-react";
 import { useDashboardScan } from "@/app/dashboard/scan-context";
-import { getContracts, runGeminiScan, addContract, syncToServer, type DashboardContract } from "@/lib/api";
+import { getContracts, addContract, syncToServer, type DashboardContract } from "@/lib/api";
 import { formatSyncTime } from "@/lib/format-metrics";
 import { ContractStorage } from "@/lib/storage";
 import { toast } from "@/components/ui/toast";
@@ -319,22 +319,9 @@ export default function ContractsPage() {
   };
 
   const handleContractScan = async (address: string) => {
-    try {
-      setIsScanning(true);
-      await runGeminiScan({ contractAddress: address });
-      toast.success("Contract scan started", {
-        description: `Targeted scan initiated for ${address}`,
-      });
-    } catch (err: any) {
-      console.error("Contract scan failed", err);
-      const message =
-        typeof err?.message === "string" ? err.message : String(err || "Unknown error");
-      toast.error("Contract scan failed", {
-        description: `${address}: ${message}`,
-      });
-    } finally {
-      setIsScanning(false);
-    }
+    toast.info("Use Full Analysis on the contract page", {
+      description: "Open the contract and click Full Analysis for on-chain CRE risk analysis.",
+    });
   };
 
   const filteredContracts = contracts.filter((contract) => {

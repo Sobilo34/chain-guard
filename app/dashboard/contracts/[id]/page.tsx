@@ -78,7 +78,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getContractDetail, isGenericOrUnknownContractName, getChainSelectorNameFromContract, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
-import { useAccount } from "wagmi";
+import { useAccount, useSwitchChain } from "wagmi";
 import { useRequestCREAnalysis, useCREAssessment } from "@/hooks/use-cre-onchain";
 import { CRE_CONSUMER_CHAIN_ID, type OnchainAssessment } from "@/lib/cre-consumer";
 import { getBlockscoutAddressUrl } from "@/lib/cre/explorer-api";
@@ -136,6 +136,9 @@ export default function ContractDetailPage({
   const [analysisLogLines, setAnalysisLogLines] = useState<string[]>([]);
   const analysisLogRef = useRef<HTMLDivElement>(null);
   const [analysisFallbackToOnchain, setAnalysisFallbackToOnchain] = useState(false);
+  const [riskEngineSubStep, setRiskEngineSubStep] = useState(0);
+  const [creWaitingStartTime, setCreWaitingStartTime] = useState<number | null>(null);
+  const [creWaitingElapsedSec, setCreWaitingElapsedSec] = useState(0);
   const [analysisNeedMoreInfo, setAnalysisNeedMoreInfo] = useState<{
     questions: NeedMoreInfoQuestion[];
     message?: string;
@@ -150,15 +153,59 @@ export default function ContractDetailPage({
     isSuccess: creRequestSuccess,
     lastRequestId,
     reset: resetCRERequest,
+    txHash: creTxHash,
   } = useRequestCREAnalysis();
   const { assessment: creAssessment, refetch: refetchCREAssessment } = useCREAssessment(lastRequestId);
   const [creError, setCreError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!lastRequestId) return;
-    const t = setInterval(() => refetchCREAssessment(), 8000);
+    const t = setInterval(() => refetchCREAssessment(), 4000);
     return () => clearInterval(t);
   }, [lastRequestId, refetchCREAssessment]);
+
+  // Advance "Risk engine" sub-steps every 12s while waiting (so user sees progress). Reset when we get result or leave.
+  useEffect(() => {
+    if (analysisStage !== "onchain_requested" || !lastRequestId || creAssessment) {
+      setRiskEngineSubStep(0);
+      setCreWaitingStartTime(null);
+      setCreWaitingElapsedSec(0);
+      return;
+    }
+    if (creWaitingStartTime === null) {
+      setCreWaitingStartTime(Date.now());
+      setCreWaitingElapsedSec(0);
+    }
+    const t = setInterval(() => {
+      setRiskEngineSubStep((s) => Math.min(4, s + 1));
+    }, 12000);
+    return () => clearInterval(t);
+  }, [analysisStage, lastRequestId, creAssessment, creWaitingStartTime]);
+
+  // Update elapsed time every second while waiting for CRE result.
+  useEffect(() => {
+    if (creWaitingStartTime === null || creAssessment) return;
+    const t = setInterval(() => {
+      setCreWaitingElapsedSec(Math.floor((Date.now() - creWaitingStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [creWaitingStartTime, creAssessment]);
+
+  // When in Full Analysis flow and we get lastRequestId, add a descriptive log line once.
+  const lastRequestIdLogRef = useRef(false);
+  useEffect(() => {
+    if (!analysisFallbackToOnchain || analysisStage !== "onchain_requested" || !lastRequestId) return;
+    if (lastRequestIdLogRef.current) return;
+    lastRequestIdLogRef.current = true;
+    setAnalysisLogLines((prev) => [
+      ...prev,
+      `Request ID: ${lastRequestId.slice(0, 10)}…${lastRequestId.slice(-8)}.`,
+      "CRE workflow: event detected → risk engine runs (data + checks) → report written on-chain. Usually 1–2 min.",
+    ]);
+  }, [analysisFallbackToOnchain, analysisStage, lastRequestId]);
+  useEffect(() => {
+    if (analysisStage !== "onchain_requested") lastRequestIdLogRef.current = false;
+  }, [analysisStage]);
 
   // When Full Analysis fell back to on-chain CRE and the assessment is in, apply it and close modal.
   useEffect(() => {
@@ -196,6 +243,9 @@ export default function ContractDetailPage({
 
   const { chain } = useAccount();
   const isCREChain = chain?.id === CRE_CONSUMER_CHAIN_ID;
+  const switchChain = useSwitchChain();
+  const isSwitchingChain = switchChain.isPending;
+  const creChainName = CRE_CONSUMER_CHAIN_ID === 11155111 ? "Sepolia" : `Chain ${CRE_CONSUMER_CHAIN_ID}`;
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -415,6 +465,7 @@ export default function ContractDetailPage({
 
   const handleFullAnalysis = async () => {
     if (!data?.address) return;
+    lastRequestIdLogRef.current = false;
     setAnalyzeLoading(true);
     setAnalyzeResult(null);
     setAnalysisError(null);
@@ -430,7 +481,7 @@ export default function ContractDetailPage({
       .then(() => {
         setAnalysisStage("onchain_requested");
         setAnalysisError(null);
-        setAnalysisLogLines((prev) => [...prev, "On-chain CRE requested. Waiting for result…"]);
+        setAnalysisLogLines((prev) => [...prev, "On-chain CRE requested. Waiting for result… (usually 1–2 min)"]);
         setAnalysisFallbackToOnchain(true);
       })
       .catch((e: any) => {
@@ -647,6 +698,82 @@ export default function ContractDetailPage({
                     </div>
                   </div>
                 </div>
+                {/* CRE pipeline steps — where we are */}
+                {(analysisStage === "discovering" || analysisStage === "onchain_requested") && (
+                  <div className="px-8 pb-4">
+                    <div className="rounded-2xl border border-border/50 bg-muted/30 p-4 space-y-2">
+                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">CRE pipeline</p>
+                      <div className="grid gap-2 text-sm">
+                        <div className={cn("flex items-center gap-2", creRequestPending ? "text-primary" : "text-muted-foreground")}>
+                          {creRequestPending ? (
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                          ) : (lastRequestId || creTxHash) ? (
+                            <span className="text-emerald-500 font-bold">✓</span>
+                          ) : (
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-muted-foreground/50" />
+                          )}
+                          <span>1. Submit transaction on {creChainName}</span>
+                        </div>
+                        <div className={cn("flex items-center gap-2", lastRequestId ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                          {lastRequestId ? (
+                            <span className="text-emerald-500 font-bold">✓</span>
+                          ) : (
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-muted-foreground/50" />
+                          )}
+                          <span>2. CRE workflow picks up request (event on-chain)</span>
+                        </div>
+                        <div className={cn("flex items-start gap-2", lastRequestId && !creAssessment ? "text-primary" : creAssessment ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                          {creAssessment ? (
+                            <span className="text-emerald-500 font-bold mt-0.5">✓</span>
+                          ) : lastRequestId ? (
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin mt-0.5 shrink-0" />
+                          ) : (
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-muted-foreground/50 mt-0.5 shrink-0" />
+                          )}
+                          <div className="min-w-0">
+                            <span>3. Risk engine runs (data + checks → report)</span>
+                            {lastRequestId && !creAssessment && (
+                              <>
+                                <p className="text-[11px] text-muted-foreground mt-1.5 font-normal">Typical workflow (updates every ~12s):</p>
+                                <ul className="mt-1 space-y-0.5 text-xs font-normal text-muted-foreground">
+                                  {["Fetching contract state…", "Fetching market data (price feeds)…", "Running AI risk analysis…", "Building report…", "Writing report on-chain…"].map((label, i) => (
+                                    <li key={i} className={cn("flex items-center gap-1.5", i < riskEngineSubStep && "text-emerald-600/90", i === riskEngineSubStep && "text-primary")}>
+                                      {i < riskEngineSubStep ? <span className="text-emerald-500">✓</span> : i === riskEngineSubStep ? <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" /> : <span className="inline-block h-2 w-2 rounded-full bg-muted-foreground/40" />}
+                                      {label}
+                                    </li>
+                                  ))}
+                                </ul>
+                                {creWaitingStartTime != null && (
+                                  <p className="text-[11px] text-muted-foreground mt-2 font-mono">
+                                    Elapsed: {Math.floor(creWaitingElapsedSec / 60)}m {creWaitingElapsedSec % 60}s
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className={cn("flex items-center gap-2", creAssessment ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                          {creAssessment ? (
+                            <span className="text-emerald-500 font-bold">✓</span>
+                          ) : (
+                            <span className="inline-block h-4 w-4 rounded-full border-2 border-muted-foreground/50" />
+                          )}
+                          <span>4. Report written on-chain → done</span>
+                        </div>
+                      </div>
+                      {creTxHash && (
+                        <a
+                          href={CRE_CONSUMER_CHAIN_ID === 11155111 ? `https://sepolia.etherscan.io/tx/${creTxHash}` : `https://etherscan.io/tx/${creTxHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline mt-2"
+                        >
+                          View transaction on explorer →
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Streaming log — like generative AI output */}
                 <div className="px-8 pb-8">
                   <div className="rounded-2xl border border-border/50 bg-black/40 font-mono text-sm text-foreground/90 overflow-hidden">
@@ -722,17 +849,30 @@ export default function ContractDetailPage({
                     <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
                       <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
                         {analysisError.includes("Switch network") || analysisError.includes("chain")
-                          ? "Switch to the CRE consumer chain (e.g. Sepolia) and run Full Analysis again to complete analysis on-chain."
+                          ? `Full Analysis uses the CRE consumer contract on ${creChainName}. Switch your wallet to ${creChainName}, then run Full Analysis again.`
                           : "Something went wrong. You can try again or use Request onchain (CRE) from the contract page."}
                       </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-amber-500/50 text-amber-700 dark:text-amber-400"
-                        onClick={() => setAnalysisModalOpen(false)}
-                      >
-                        Close
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        {(analysisError.includes("Switch network") || analysisError.includes("chain")) && (
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="bg-amber-600 hover:bg-amber-700 text-white"
+                            disabled={isSwitchingChain || isCREChain}
+                            onClick={() => switchChain.mutate({ chainId: CRE_CONSUMER_CHAIN_ID })}
+                          >
+                            {isSwitchingChain ? "Switching…" : `Switch to ${creChainName}`}
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-amber-500/50 text-amber-700 dark:text-amber-400"
+                          onClick={() => setAnalysisModalOpen(false)}
+                        >
+                          Close
+                        </Button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -869,30 +1009,36 @@ export default function ContractDetailPage({
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="flex items-center gap-3"
+          className="flex flex-col gap-2"
         >
-          <Button
-            variant="outline"
-            disabled={analyzeLoading}
-            onClick={handleFullAnalysis}
-            className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
-          >
-            <Sparkles className={cn("mr-2 h-4 w-4", analyzeLoading && "animate-pulse")} />
-            {analyzeLoading ? "Analyzing…" : "Full Analysis"}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={creRequestPending || !isCREChain}
-            onClick={handleRequestOnchainCRE}
-            className="h-12 rounded-[1.25rem] border-primary/40 bg-primary/5 font-bold backdrop-blur-xl"
-            title={!isCREChain ? `Switch to chain ${CRE_CONSUMER_CHAIN_ID} (e.g. Sepolia) to request onchain CRE analysis` : "Request risk analysis onchain via Chainlink CRE"}
-          >
+          <p className="text-xs text-muted-foreground">
+            Both trigger the same on-chain CRE. <strong>Full Analysis</strong> opens a progress modal and applies the result when done. <strong>Request onchain (CRE)</strong> runs in the background; result appears below (same 1–2 min).
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              variant="outline"
+              disabled={analyzeLoading}
+              onClick={handleFullAnalysis}
+              className="h-12 rounded-[1.25rem] border-border/40 bg-card/40 font-bold backdrop-blur-xl"
+              title="Guided flow: modal with pipeline steps + auto-apply result"
+            >
+              <Sparkles className={cn("mr-2 h-4 w-4", analyzeLoading && "animate-pulse")} />
+              {analyzeLoading ? "Analyzing…" : "Full Analysis"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={creRequestPending || !isCREChain}
+              onClick={handleRequestOnchainCRE}
+              className="h-12 rounded-[1.25rem] border-primary/40 bg-primary/5 font-bold backdrop-blur-xl"
+              title={!isCREChain ? `Switch to chain ${CRE_CONSUMER_CHAIN_ID} (e.g. Sepolia) to request onchain CRE analysis` : "Same on-chain request; result appears below when ready (no modal)."}
+            >
             <Zap className={cn("mr-2 h-4 w-4", creRequestPending && "animate-pulse")} />
             {creRequestPending ? "Requesting…" : "Request onchain (CRE)"}
           </Button>
+          </div>
           {creError && <p className="text-xs text-destructive">{creError}</p>}
           {lastRequestId && !creAssessment && (
-            <span className="text-xs text-muted-foreground">CRE processing… (requestId: {lastRequestId.slice(0, 10)}…)</span>
+            <span className="text-xs text-muted-foreground">CRE processing… (usually 1–2 min) requestId: {lastRequestId.slice(0, 10)}…</span>
           )}
           {creAssessment && (
             <span className="text-xs font-medium text-emerald-600">

@@ -43,6 +43,14 @@ ChainGuard registry lives in **chain-guard-smart-contract**. To deploy and use t
 3. Run `./deploy.sh` (or `source .env && forge script script/Deploy.s.sol --rpc-url "$SEPOLIA_RPC_URL" --broadcast`)
 4. Add the deployed address to `chain-guard/.env.local`: `CHAINGUARD_REGISTRY_ADDRESS=0x...`, plus `CHAINGUARD_REGISTRY_PRIVATE_KEY` and `SEPOLIA_RPC_URL`
 
+## ChainGuard CRE + Smart Contract (how they work together)
+
+- **chain-guard** (this app): Frontend + Next.js API. Users add contracts, run **Full Analysis**, and see alerts. Full Analysis sends a transaction to the **CRE consumer contract** on Sepolia; no backend CRE runs in this app.
+- **chain-guard-smart-contract**: Deploys **ChainGuardRegistry** (contracts/alerts) and **ChainGuardCREConsumer**. When a user runs Full Analysis, the frontend calls `requestRiskAnalysis(contractAddress, chainSelectorName)` on the consumer; the contract emits an event.
+- **chain-guard-cre** (chainguard-sentinel): The **CRE workflow** that reacts to that event. Run it via Chainlink DON or locally (`cre run`). It reads the event, fetches contract + market data, runs AI, and writes the report back to the consumer contract. The frontend then reads the result with `getAssessment(requestId)`.
+
+So: **Frontend → Consumer contract (tx) → CRE workflow (chain-guard-cre) → Consumer contract (report)**. The bridge-api in chain-guard-cre is optional (e.g. for local CRE simulation or discovery); the app does not depend on it for production.
+
 ## How It Works
 
 1. Create and modify your project using [v0.app](https://v0.app)

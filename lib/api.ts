@@ -495,44 +495,6 @@ export async function runAnalyzeStream(
   }
 }
 
-/** Payload for a one-off CRE run (e.g. initial scan after add). Same shape as suggestedRequest from discover. */
-export type InitialScanPayload = {
-  address: string;
-  name?: string;
-  chainSelectorName?: string;
-  riskThresholds?: Record<string, number>;
-  priceFeeds?: Array<{ pairName: string; feedAddress: string; decimals?: number }>;
-};
-
-/** Run CRE for a single contract and update that contract in storage with the assessment. Used after add contract. */
-export async function runInitialScanForContract(payload: InitialScanPayload): Promise<any | null> {
-  const analyzeContract = {
-    address: payload.address,
-    name: payload.name || "Discovered Contract",
-    chainSelectorName: payload.chainSelectorName || "ethereum-mainnet",
-    riskThresholds: payload.riskThresholds || { depegTolerance: 0.02, volatilityMax: 0.15, liquidityDropMax: 0.25, collateralRatioMin: 1.5 },
-    priceFeeds: (payload.priceFeeds?.length ? payload.priceFeeds : [{ pairName: "ETH/USD", feedAddress: "0x5f4eC3Dd9Bbd43714FE2740F5E3616155c5b8419", decimals: 8 }]).map((f) => ({ pairName: f.pairName, feedAddress: f.feedAddress, decimals: f.decimals ?? 8 })),
-  };
-  const response = await fetchJson<{ success: boolean; assessments: any[] }>(`${API_BASE_URL}/simulate`, {
-    method: "POST",
-    body: JSON.stringify({ analyzeContract }),
-  });
-  const assessment = response.assessments?.[0];
-  if (response.success && assessment) {
-    const addr = (assessment.contractAddress || payload.address).toLowerCase().trim();
-    const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
-    ContractStorage.updateContract(with0x, {
-      riskLevel: (assessment.riskLevel || "LOW").toLowerCase() as any,
-      status: assessment.riskLevel || "LOW",
-      riskScore: assessment.riskScore,
-      latestScan: assessment.latestScan || assessment,
-      metrics: assessment.metrics,
-    });
-    return assessment;
-  }
-  return null;
-}
-
 export async function runGeminiScan(payload?: {
   contractAddress?: string;
   chainSelectorName?: string;

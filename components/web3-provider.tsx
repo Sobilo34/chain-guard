@@ -10,6 +10,7 @@ import {
   sepolia,
   type AppKitNetwork,
 } from "@reown/appkit/networks";
+import { http } from "viem";
 import {
   WagmiProvider,
   type Config,
@@ -18,6 +19,12 @@ import {
 } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { type ReactNode } from "react";
+
+// Use Alchemy (or custom) Sepolia RPC when set — faster and more reliable for CRE consumer chain.
+const sepoliaRpcUrl =
+  typeof process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL === "string" && process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL.trim()
+    ? process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL.trim()
+    : undefined;
 
 // 1. Get projectId from https://cloud.reown.com
 const projectId =
@@ -41,13 +48,18 @@ const networks: [AppKitNetwork, ...AppKitNetwork[]] = [
   sepolia,
 ];
 
-// 4. Create Wagmi Adapter
+// 4. Create Wagmi Adapter (custom Sepolia RPC when NEXT_PUBLIC_SEPOLIA_RPC_URL or Alchemy is set)
 const wagmiAdapter = new WagmiAdapter({
   networks,
   projectId,
   ssr: true,
   storage: createStorage({
     storage: cookieStorage,
+  }),
+  ...(sepoliaRpcUrl && {
+    transports: {
+      [sepolia.id]: http(sepoliaRpcUrl),
+    },
   }),
 });
 

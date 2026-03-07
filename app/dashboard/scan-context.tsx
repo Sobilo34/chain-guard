@@ -2,10 +2,6 @@
 
 import React, { createContext, useCallback, useContext, useState } from "react";
 import { ContractStorage } from "@/lib/storage";
-import {
-  runGeminiScan,
-  runFullAnalysisForAllContracts,
-} from "@/lib/api";
 import { toast } from "@/components/ui/toast";
 
 type ScanContextValue = {
@@ -34,67 +30,21 @@ export function DashboardScanProvider({
       const contracts = ContractStorage.getContracts();
       if (contracts.length === 0) {
         toast.warning("No contracts to scan", {
-          description:
-            "Add contracts (address + network) in the Registry, then run Force Scan.",
+          description: "Add contracts in the Registry, then use Full Analysis on each contract page.",
         });
         return;
       }
       setIsScanning(true);
-      setScanMessage("Initializing CRE Simulator...");
+      setScanMessage("CRE runs on-chain only.");
       try {
-        const scanResponse = await runGeminiScan({ runPostCREAi: true });
-
-        if (scanResponse.data?.quotaExceeded) {
-          setScanMessage("OpenRouter quota exceeded — showing fallback assessment.");
-        } else if (
-          scanResponse.success &&
-          scanResponse.assessmentsCount === 0
-        ) {
-          setScanMessage("Scan finished but no contract results returned.");
-          toast.warning("No assessments returned", {
-            description:
-              "CRE completed but no contract results were received. Check that config matches your monitored contracts and see terminal/API logs.",
-          });
-        } else if (
-          scanResponse.success &&
-          scanResponse.assessmentsCount > 0
-        ) {
-          setScanMessage("Running Full Analysis for all contracts...");
-          toast.success("Scan complete", {
-            description: `${scanResponse.assessmentsCount} contract(s) updated. Running Full Analysis...`,
-          });
-        } else {
-          setScanMessage("Running Full Analysis for all contracts...");
-        }
-
-        try {
-          const analysisResult = await runFullAnalysisForAllContracts();
-          if (analysisResult.success > 0) {
-            setScanMessage("Full Analysis complete.");
-            toast.success("Full Analysis complete", {
-              description:
-                analysisResult.failed > 0
-                  ? `${analysisResult.success} contract(s) updated; ${analysisResult.failed} failed.`
-                  : `All ${analysisResult.success} contract(s) updated with full analysis.`,
-            });
-          }
-        } catch (e) {
-          console.error("Full Analysis batch failed", e);
-          setScanMessage("Scan complete. Full Analysis had errors.");
-        }
-
-        setScanMessage("Dashboard updated.");
+        toast.info("CRE runs on-chain only", {
+          description: "Use Full Analysis on each contract page for risk analysis (smart contract → CRE workflow).",
+        });
         window.dispatchEvent(new Event("storage"));
         options?.onComplete?.();
-      } catch (err) {
-        setScanMessage("Scan failed. Check bridge API and terminal logs.");
-        console.error(err);
-        toast.error("Force Scan failed", {
-          description: err instanceof Error ? err.message : "Scan failed.",
-        });
       } finally {
         setIsScanning(false);
-        setTimeout(() => setScanMessage(null), 5000);
+        setTimeout(() => setScanMessage(null), 3000);
       }
     },
     []
