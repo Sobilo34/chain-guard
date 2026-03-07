@@ -76,11 +76,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getContractDetail, runAnalyzeStream, isGenericOrUnknownContractName, getNetworkFromContract, getChainSelectorNameFromContract, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
+import { getContractDetail, isGenericOrUnknownContractName, getChainSelectorNameFromContract, type AnalyzeResult, type NeedMoreInfoQuestion } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
 import { useAccount } from "wagmi";
 import { useRequestCREAnalysis, useCREAssessment } from "@/hooks/use-cre-onchain";
-import { CRE_CONSUMER_CHAIN_ID } from "@/lib/cre-consumer";
+import { CRE_CONSUMER_CHAIN_ID, type OnchainAssessment } from "@/lib/cre-consumer";
 import { getBlockscoutAddressUrl } from "@/lib/cre/explorer-api";
 import { formatTvl, formatVolume, formatPrice, formatLiquidityPercent, formatSyncTime } from "@/lib/format-metrics";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
@@ -130,11 +130,12 @@ export default function ContractDetailPage({
   const [thresholdForm, setThresholdForm] = useState(DEFAULT_RISK_THRESHOLDS);
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false);
   const [analysisStage, setAnalysisStage] = useState<
-    "discovering" | "pre-cre" | "cre" | "post-cre" | "complete" | "error"
+    "discovering" | "pre-cre" | "cre" | "post-cre" | "complete" | "error" | "onchain_requested"
   >("discovering");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [analysisLogLines, setAnalysisLogLines] = useState<string[]>([]);
   const analysisLogRef = useRef<HTMLDivElement>(null);
+  const [analysisFallbackToOnchain, setAnalysisFallbackToOnchain] = useState(false);
   const [analysisNeedMoreInfo, setAnalysisNeedMoreInfo] = useState<{
     questions: NeedMoreInfoQuestion[];
     message?: string;
@@ -159,6 +160,22 @@ export default function ContractDetailPage({
     return () => clearInterval(t);
   }, [lastRequestId, refetchCREAssessment]);
 
+  // When Full Analysis fell back to on-chain CRE and the assessment is in, apply it and close modal.
+  useEffect(() => {
+    if (!analysisFallbackToOnchain || analysisStage !== "onchain_requested" || !creAssessment) return;
+    const result = analyzeResultFromOnchainAssessment(creAssessment);
+    applyAnalysisResult(result);
+    setAnalysisStage("complete");
+    setAnalysisLogLines((prev) =>
+      prev[prev.length - 1] === "Done. Analysis saved." ? prev : [...prev, "Done. Analysis saved."]
+    );
+    setAnalysisFallbackToOnchain(false);
+    toast.success("Full analysis complete (on-chain CRE)", {
+      description: "Analysis saved from Chainlink CRE. It will persist until you run another.",
+    });
+    setTimeout(() => setAnalysisModalOpen(false), 2200);
+  }, [analysisFallbackToOnchain, analysisStage, creAssessment]);
+
   const handleRequestOnchainCRE = () => {
     if (!data?.address) return;
     setCreError(null);
@@ -170,12 +187,12 @@ export default function ContractDetailPage({
   };
 
   useEffect(() => {
-    if (creRequestSuccess && lastRequestId) {
+    if (creRequestSuccess && lastRequestId && !analysisFallbackToOnchain) {
       toast.success("Request submitted onchain", {
         description: "CRE workflow will process and write the result onchain. You can poll for the result.",
       });
     }
-  }, [creRequestSuccess, lastRequestId]);
+  }, [creRequestSuccess, lastRequestId, analysisFallbackToOnchain]);
 
   const { chain } = useAccount();
   const isCREChain = chain?.id === CRE_CONSUMER_CHAIN_ID;
@@ -274,6 +291,18 @@ export default function ContractDetailPage({
       analysisLogRef.current.scrollTop = analysisLogRef.current.scrollHeight;
     }
   }, [analysisLogLines]);
+
+  /** Build a minimal AnalyzeResult from on-chain CRE assessment so we can reuse applyAnalysisResult. */
+  const analyzeResultFromOnchainAssessment = (a: OnchainAssessment): AnalyzeResult & { discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }> } => ({
+    contractContext: {},
+    initialAnalysis: { summary: a.summary },
+    creObservations: {
+      riskLevel: a.riskLevelLabel,
+      riskScore: a.riskScore,
+      latestScan: { reasoning: a.summary },
+    },
+    finalAnalysis: { summary: a.summary },
+  });
 
   const applyAnalysisResult = (result: AnalyzeResult & { discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }> }) => {
     const addr = (data?.address || "").toLowerCase().trim();
@@ -384,75 +413,42 @@ export default function ContractDetailPage({
     }
   };
 
-  const runAnalysisStream = async (userContext?: Record<string, string>) => {
-    if (!data?.address) return;
-    const callbacks = {
-      onNarrative(text: string) {
-        setAnalysisLogLines((prev) => [...prev, text]);
-      },
-      onResult(result: AnalyzeResult) {
-        applyAnalysisResult(result);
-        setAnalysisStage("complete");
-        setAnalysisLogLines((prev) =>
-          prev[prev.length - 1] === "Done. Analysis saved." ? prev : [...prev, "Done. Analysis saved."]
-        );
-        toast.success("Full analysis complete", {
-          description: "Analysis saved. It will persist until you run another.",
-        });
-        setTimeout(() => setAnalysisModalOpen(false), 2200);
-        setAnalyzeLoading(false);
-      },
-      onError(message: string) {
-        setAnalysisError(message);
-        setAnalysisStage("error");
-        setAnalysisLogLines((prev) => [...prev.filter((l) => !l.startsWith("Error:")), `Error: ${message}`]);
-        toast.error("Analysis failed", { description: message });
-        setTimeout(() => setAnalysisModalOpen(false), 3000);
-        setAnalyzeLoading(false);
-      },
-      onNeedMoreInfo(questions: NeedMoreInfoQuestion[], message?: string) {
-        setAnalysisNeedMoreInfo({ questions, message });
-        setAnalysisLogLines((prev) => [...prev, "I need a bit more information to give you an accurate result."]);
-        setAnalyzeLoading(false);
-      },
-    };
-    try {
-      await runAnalyzeStream(data.address, networkFromContract, callbacks, userContext);
-    } catch (err: any) {
-      const msg = err?.message || "Analysis failed";
-      setAnalysisError(msg);
-      setAnalysisStage("error");
-      setAnalysisLogLines((prev) => [...prev.filter((l) => !l.startsWith("Error:")), `Error: ${msg}`]);
-      toast.error("Analysis failed", { description: msg });
-      setTimeout(() => setAnalysisModalOpen(false), 3000);
-      setAnalyzeLoading(false);
-    }
-  };
-
   const handleFullAnalysis = async () => {
     if (!data?.address) return;
     setAnalyzeLoading(true);
     setAnalyzeResult(null);
     setAnalysisError(null);
     setAnalysisStage("discovering");
+    setAnalysisFallbackToOnchain(false);
     setAnalysisNeedMoreInfo(null);
     setNeedMoreInfoFormValues({});
-    setAnalysisLogLines(["Starting full analysis…"]);
+    setAnalysisLogLines(["Starting full analysis (on-chain CRE)…", "Requesting on-chain CRE…"]);
     setAnalysisModalOpen(true);
-    await runAnalysisStream();
+    resetCRERequest();
+    setAnalyzeLoading(false);
+    requestCREAnalysis(data.address, chainSelectorName)
+      .then(() => {
+        setAnalysisStage("onchain_requested");
+        setAnalysisError(null);
+        setAnalysisLogLines((prev) => [...prev, "On-chain CRE requested. Waiting for result…"]);
+        setAnalysisFallbackToOnchain(true);
+      })
+      .catch((e: any) => {
+        const errMsg = e?.message || "Request failed";
+        setAnalysisError(errMsg);
+        setAnalysisStage("error");
+        setAnalysisLogLines((prev) => [...prev.filter((l) => !l.startsWith("Error:")), `Error: ${errMsg}`]);
+        toast.warning("Switch network to run CRE", {
+          description: "Connect to the CRE consumer chain (e.g. Sepolia) and run Full Analysis again.",
+        });
+        setTimeout(() => setAnalysisModalOpen(false), 4000);
+      });
   };
 
   const handleNeedMoreInfoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const userContext: Record<string, string> = {};
-    Object.entries(needMoreInfoFormValues).forEach(([id, value]) => {
-      if (value != null && String(value).trim() !== "") userContext[id] = String(value).trim();
-    });
     setAnalysisNeedMoreInfo(null);
     setNeedMoreInfoFormValues({});
-    setAnalysisLogLines((prev) => [...prev, "Using your answers, running analysis again…"]);
-    setAnalyzeLoading(true);
-    runAnalysisStream(userContext);
   };
 
   if (loading) {
@@ -647,7 +643,7 @@ export default function ContractDetailPage({
                     </div>
                     <div>
                       <h2 className="text-xl font-black tracking-tight text-foreground">Full Analysis</h2>
-                      <p className="text-xs text-muted-foreground font-medium">AI is analyzing your contract — here’s what’s happening</p>
+                      <p className="text-xs text-muted-foreground font-medium">On-chain CRE — same behavior locally and in production</p>
                     </div>
                   </div>
                 </div>
@@ -719,6 +715,25 @@ export default function ContractDetailPage({
                 {analysisStage === "complete" && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-8 pb-8 pt-0">
                     <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Closing shortly…</p>
+                  </motion.div>
+                )}
+                {analysisStage === "error" && analysisError && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-8 pb-8 pt-2">
+                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                      <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                        {analysisError.includes("Switch network") || analysisError.includes("chain")
+                          ? "Switch to the CRE consumer chain (e.g. Sepolia) and run Full Analysis again to complete analysis on-chain."
+                          : "Something went wrong. You can try again or use Request onchain (CRE) from the contract page."}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-amber-500/50 text-amber-700 dark:text-amber-400"
+                        onClick={() => setAnalysisModalOpen(false)}
+                      >
+                        Close
+                      </Button>
+                    </div>
                   </motion.div>
                 )}
               </motion.div>

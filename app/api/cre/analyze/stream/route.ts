@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { buildCREConfigFromDiscovery } from "@/lib/cre/build-config";
 import { runDiscovery } from "@/lib/cre/run-discovery";
 import { runSimulateForAnalyze } from "@/lib/cre/run-simulate";
+import { isServerlessProduction, CRE_NOT_AVAILABLE_MESSAGE } from "@/lib/cre/serverless-check";
 
 function isMainnet(network: string): boolean {
   const n = (network || "").toLowerCase();
@@ -86,6 +87,17 @@ export async function POST(req: NextRequest) {
           "Only mainnet is supported. Provide a mainnet network (e.g. ethereumMainnet, arbitrumMainnet).",
       }),
       { status: 400 }
+    );
+  }
+
+  if (isServerlessProduction()) {
+    return new Response(
+      JSON.stringify({
+        error: CRE_NOT_AVAILABLE_MESSAGE,
+        useOnchainCRE: true,
+        code: "CRE_NOT_AVAILABLE",
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
     );
   }
 

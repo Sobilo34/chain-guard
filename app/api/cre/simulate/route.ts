@@ -67,6 +67,13 @@ function toCREEntry(c: ContractInput): {
 
 export async function POST(req: NextRequest) {
     try {
+        if (isServerlessProduction()) {
+            return NextResponse.json(
+                { error: CRE_NOT_AVAILABLE_MESSAGE, code: "CRE_NOT_AVAILABLE" },
+                { status: 503 }
+            );
+        }
+
         let body: { analyzeContract?: AnalyzeContract; contracts?: ContractInput[]; runPostCREAi?: boolean } = {};
         try {
             body = await req.json();

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildCREConfigFromDiscovery } from "@/lib/cre/build-config";
+import { isServerlessProduction, CRE_NOT_AVAILABLE_MESSAGE } from "@/lib/cre/serverless-check";
 
 function isMainnet(network: string): boolean {
   const n = (network || "").toLowerCase();
@@ -39,6 +40,12 @@ async function openRouterJson<T>(prompt: string): Promise<T> {
 
 export async function POST(req: NextRequest) {
   try {
+    if (isServerlessProduction()) {
+      return NextResponse.json(
+        { error: CRE_NOT_AVAILABLE_MESSAGE, useOnchainCRE: true, code: "CRE_NOT_AVAILABLE" },
+        { status: 503 }
+      );
+    }
     const { address, network } = await req.json();
     if (!address) {
       return NextResponse.json({ error: "address is required" }, { status: 400 });

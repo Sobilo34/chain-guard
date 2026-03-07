@@ -409,6 +409,17 @@ export async function runAnalyzeStream(
   });
   if (!res.ok) {
     const raw = await res.text();
+    if (res.status === 503) {
+      try {
+        const json = JSON.parse(raw);
+        if (json.useOnchainCRE || json.code === "CRE_NOT_AVAILABLE") {
+          callbacks.onError("CRE_NOT_AVAILABLE: Use Request onchain (CRE) below for verified analysis.");
+          return;
+        }
+      } catch {
+        // use raw below
+      }
+    }
     callbacks.onError(raw || `API ${res.status}`);
     return;
   }
