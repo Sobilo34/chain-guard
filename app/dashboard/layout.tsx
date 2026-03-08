@@ -4,7 +4,9 @@ import React from "react";
 import { Suspense } from "react";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DashboardScanProvider } from "./scan-context";
+import { AnalysisProvider, useAnalysisContext } from "./analysis-context";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,7 @@ import {
   Menu,
   X,
   Globe,
+  Sparkles,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import * as framerMotion from "framer-motion";
@@ -42,6 +45,32 @@ const navigation = [
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
+/** Floating pill when Full Analysis is collapsed and user is on another dashboard page. Click to go to contract and expand. */
+function AnalysisCollapsedPill() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { pendingAnalysis, updatePendingAnalysis } = useAnalysisContext();
+  if (!pendingAnalysis?.modalCollapsed) return null;
+  const contractPagePath = `/dashboard/contracts/${pendingAnalysis.contractAddress}`;
+  if (pathname === contractPagePath) return null; // Contract page shows its own pill
+  return (
+    <div className="fixed bottom-6 right-6 z-[99]">
+      <Button
+        variant="secondary"
+        size="sm"
+        className="rounded-full shadow-lg border bg-card/95 backdrop-blur"
+        onClick={() => {
+          updatePendingAnalysis({ modalCollapsed: false });
+          router.push(contractPagePath);
+        }}
+      >
+        <Sparkles className="h-4 w-4 mr-2" />
+        Analysis in progress…
+      </Button>
+    </div>
+  );
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -58,6 +87,7 @@ export default function DashboardLayout({
 
   return (
     <DashboardScanProvider>
+      <AnalysisProvider>
     <div className="relative min-h-screen bg-background transition-colors duration-300 flex flex-col">
       {/* Dynamic Background elements - Subtler than landing */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -307,6 +337,7 @@ export default function DashboardLayout({
         >
           {children}
         </motion.div>
+        <AnalysisCollapsedPill />
       </main>
 
       {/* Footer */}
@@ -331,6 +362,7 @@ export default function DashboardLayout({
         </div>
       </footer>
     </div>
+      </AnalysisProvider>
     </DashboardScanProvider>
   );
 }

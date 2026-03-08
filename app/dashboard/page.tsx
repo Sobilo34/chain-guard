@@ -350,13 +350,21 @@ export default function DashboardPage() {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       if (liveContracts.length === 0) return;
       try {
+        const triggerRes = await fetch("/api/cre/trigger-analysis", { method: "POST" });
+        if (triggerRes.ok) {
+          const data = await triggerRes.json().catch(() => ({}));
+          if (data.requested > 0) {
+            refreshRef.current?.();
+          }
+        }
         const cronRes = await fetch("/api/cron/scan", { method: "POST" });
         if (cronRes.ok) {
           const syncRes = await fetch("/api/sync");
           if (syncRes.ok) {
             const { contracts } = await syncRes.json();
-            if (Array.isArray(contracts) && contracts.length > 0) {
-              ContractStorage.saveContracts(contracts);
+            if (Array.isArray(contracts)) {
+              const merged = ContractStorage.mergeWithLocalCache(contracts);
+              ContractStorage.saveContracts(merged);
             }
           }
           refreshRef.current?.();
@@ -424,44 +432,60 @@ export default function DashboardPage() {
         riskThresholds: getRiskThresholds(addForm.riskProfile),
         alertChannels: ["email"],
       });
-      const network = addForm.chain;
-      try {
-        const portfolioRes = await fetch(
-          `/api/cre/portfolio?address=${encodeURIComponent(with0x)}&network=${encodeURIComponent(network)}`
-        );
-        if (portfolioRes.ok) {
-          const portfolioJson = await portfolioRes.json();
-          if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
-            ContractStorage.updateContract(with0x.toLowerCase(), {
-              metrics: {
-                tvl: portfolioJson.tvl,
-                totalValueLocked: portfolioJson.tvl,
-                price: portfolioJson.price,
-                currentPrice: portfolioJson.price,
-              },
-            });
-          }
-        }
-      } catch {
-        // non-blocking: contract is added; portfolio can refresh when user opens detail
-      }
-      syncToServer({ contracts: ContractStorage.getContracts() });
-      const res = await getOverview();
-      const d = res?.data;
-      if (d) {
-        setLiveKpis([
-          { title: "Monitored Contracts", value: `${d.kpis.monitoredContracts}`, change: "Live data", icon: FileCode2, color: "text-primary", bgColor: "bg-primary/10" },
-          { title: "Active Alerts", value: `${d.kpis.activeAlerts}`, change: `${d.kpis.activeAlerts} currently active`, icon: AlertTriangle, color: "text-danger", bgColor: "bg-danger/10" },
-          { title: "Total Value Locked", value: formatTvl(d.kpis.totalValueLocked), change: "Derived from monitored contracts", icon: TrendingUp, color: "text-success", bgColor: "bg-success/10" },
-          { title: "Risk Score", value: `${d.kpis.riskScore}/100`, change: d.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing", icon: ShieldCheck, color: d.kpis.riskScore >= 70 ? "text-warning" : "text-success", bgColor: d.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10" },
-        ]);
-        setLiveContracts(d.contracts);
-        setLiveAlerts(d.alerts);
-        setSystemStatus({ oracle: d.system.oracle, riskEngine: d.system.riskEngine, alertService: d.system.alertService, lastSync: d.system.lastSync });
-      }
-      setAddForm({ address: "", chain: "ethereumMainnet", name: "", protocol: "Normal", riskProfile: "balanced", customChainName: "", customChainSelectorName: "", customRpcUrl: "", customChainId: "" });
       setIsAddDialogOpen(false);
+      setAddForm({ address: "", chain: "ethereumMainnet", name: "", protocol: "Normal", riskProfile: "balanced", customChainName: "", customChainSelectorName: "", customRpcUrl: "", customChainId: "" });
+      setIsAdding(false);
+      const overview = getOverview();
+      const fresh = (await overview).data;
+      if (fresh) {
+        setLiveKpis([
+          { title: "Monitored Contracts", value: `${fresh.kpis.monitoredContracts}`, change: "Live data", icon: FileCode2, color: "text-primary", bgColor: "bg-primary/10" },
+          { title: "Active Alerts", value: `${fresh.kpis.activeAlerts}`, change: `${fresh.kpis.activeAlerts} currently active`, icon: AlertTriangle, color: "text-danger", bgColor: "bg-danger/10" },
+          { title: "Total Value Locked", value: formatTvl(fresh.kpis.totalValueLocked), change: "Derived from monitored contracts", icon: TrendingUp, color: "text-success", bgColor: "bg-success/10" },
+          { title: "Risk Score", value: `${fresh.kpis.riskScore}/100`, change: fresh.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing", icon: ShieldCheck, color: fresh.kpis.riskScore >= 70 ? "text-warning" : "text-success", bgColor: fresh.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10" },
+        ]);
+        setLiveContracts(fresh.contracts);
+        setLiveAlerts(fresh.alerts);
+        setSystemStatus({ oracle: fresh.system.oracle, riskEngine: fresh.system.riskEngine, alertService: fresh.system.alertService, lastSync: fresh.system.lastSync });
+      }
       toast.success("Contract added", { description: "Open the contract and run Full Analysis to start monitoring." });
+      const network = addForm.chain;
+      void (async () => {
+        try {
+          const portfolioRes = await fetch(
+            `/api/cre/portfolio?address=${encodeURIComponent(with0x)}&network=${encodeURIComponent(network)}`
+          );
+          if (portfolioRes.ok) {
+            const portfolioJson = await portfolioRes.json();
+            if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
+              ContractStorage.updateContract(with0x.toLowerCase(), {
+                metrics: {
+                  tvl: portfolioJson.tvl,
+                  totalValueLocked: portfolioJson.tvl,
+                  price: portfolioJson.price,
+                  currentPrice: portfolioJson.price,
+                },
+              });
+            }
+          }
+        } catch {
+          // non-blocking: contract is added; portfolio can refresh when user opens detail
+        }
+        syncToServer({ contracts: ContractStorage.getContracts() });
+        const res = await getOverview();
+        const d = res?.data;
+        if (d) {
+          setLiveKpis([
+            { title: "Monitored Contracts", value: `${d.kpis.monitoredContracts}`, change: "Live data", icon: FileCode2, color: "text-primary", bgColor: "bg-primary/10" },
+            { title: "Active Alerts", value: `${d.kpis.activeAlerts}`, change: `${d.kpis.activeAlerts} currently active`, icon: AlertTriangle, color: "text-danger", bgColor: "bg-danger/10" },
+            { title: "Total Value Locked", value: formatTvl(d.kpis.totalValueLocked), change: "Derived from monitored contracts", icon: TrendingUp, color: "text-success", bgColor: "bg-success/10" },
+            { title: "Risk Score", value: `${d.kpis.riskScore}/100`, change: d.kpis.riskScore >= 70 ? "Elevated risk" : "Good standing", icon: ShieldCheck, color: d.kpis.riskScore >= 70 ? "text-warning" : "text-success", bgColor: d.kpis.riskScore >= 70 ? "bg-warning/10" : "bg-success/10" },
+          ]);
+          setLiveContracts(d.contracts);
+          setLiveAlerts(d.alerts);
+          setSystemStatus({ oracle: d.system.oracle, riskEngine: d.system.riskEngine, alertService: d.system.alertService, lastSync: d.system.lastSync });
+        }
+      })();
     } catch (err) {
       console.error("Failed to add contract", err);
       setAddError("Failed to save contract. Try again.");
@@ -614,7 +638,23 @@ export default function DashboardPage() {
                     }
                   />
                 </div>
-
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="addFormName"
+                    className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
+                  >
+                    Contract name (optional)
+                  </Label>
+                  <Input
+                    id="addFormName"
+                    placeholder="Optional name"
+                    className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
+                    value={addForm.name}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, name: e.target.value })
+                    }
+                  />
+                </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label

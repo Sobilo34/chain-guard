@@ -166,7 +166,9 @@ export default function ContractsPage() {
         if (syncRes.ok) {
           const { contracts } = await syncRes.json();
           if (Array.isArray(contracts)) {
-            ContractStorage.saveContracts(contracts);
+            const merged = ContractStorage.mergeWithLocalCache(contracts);
+            ContractStorage.saveContracts(merged);
+            setContracts(merged);
           }
         }
       } catch {
@@ -269,30 +271,7 @@ export default function ContractsPage() {
         riskThresholds: {},
         alertChannels: ["email"],
       });
-      const network = newContract.chain;
-      try {
-        const portfolioRes = await fetch(
-          `/api/cre/portfolio?address=${encodeURIComponent(with0x)}&network=${encodeURIComponent(network)}`
-        );
-        if (portfolioRes.ok) {
-          const portfolioJson = await portfolioRes.json();
-          if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
-            ContractStorage.updateContract(with0x.toLowerCase(), {
-              metrics: {
-                tvl: portfolioJson.tvl,
-                totalValueLocked: portfolioJson.tvl,
-                price: portfolioJson.price,
-                currentPrice: portfolioJson.price,
-              },
-            });
-          }
-        }
-      } catch {
-        // non-blocking
-      }
-      syncToServer({ contracts: ContractStorage.getContracts() });
-      const r = await getContracts();
-      if (r.contracts) setContracts(r.contracts);
+      setIsAddDialogOpen(false);
       setNewContract({
         address: "",
         chain: "ethereumMainnet",
@@ -304,8 +283,35 @@ export default function ContractsPage() {
         customChainId: "",
         priceFeeds: [],
       });
-      setIsAddDialogOpen(false);
+      setIsAddingContract(false);
+      setContracts(ContractStorage.getContracts());
       toast.success("Contract added", { description: "Run Full Analysis on its page to start monitoring." });
+      const network = newContract.chain;
+      void (async () => {
+        try {
+          const portfolioRes = await fetch(
+            `/api/cre/portfolio?address=${encodeURIComponent(with0x)}&network=${encodeURIComponent(network)}`
+          );
+          if (portfolioRes.ok) {
+            const portfolioJson = await portfolioRes.json();
+            if (portfolioJson && (portfolioJson.tvl != null || portfolioJson.price != null)) {
+              ContractStorage.updateContract(with0x.toLowerCase(), {
+                metrics: {
+                  tvl: portfolioJson.tvl,
+                  totalValueLocked: portfolioJson.tvl,
+                  price: portfolioJson.price,
+                  currentPrice: portfolioJson.price,
+                },
+              });
+            }
+          }
+        } catch {
+          // non-blocking
+        }
+        syncToServer({ contracts: ContractStorage.getContracts() });
+        const r = await getContracts();
+        if (r.contracts) setContracts(r.contracts);
+      })();
     } catch (err) {
       console.error("Failed to add contract", err);
       toast.error("Could not add contract");
@@ -408,11 +414,11 @@ export default function ContractsPage() {
                     htmlFor="name"
                     className="text-[11px] font-bold uppercase text-muted-foreground tracking-wider"
                   >
-                    Internal Label
+                    Internal Label (optional)
                   </Label>
                   <Input
                     id="name"
-                    placeholder="e.g., Vault V1"
+                    placeholder="Optional name"
                     className="h-12 rounded-xl border-border/40 bg-muted/30 text-sm focus-visible:ring-primary/20"
                     value={newContract.name}
                     onChange={(e) =>

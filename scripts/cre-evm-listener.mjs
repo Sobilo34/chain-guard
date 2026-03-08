@@ -144,8 +144,11 @@ async function main() {
       }
     }
   } catch (_) {}
+  // Use Alchemy key from chain-guard-cre/.env or chain-guard .env.local so CRE RPCs work
+  creEnv.ALCHEMY_API_KEY = creEnv.ALCHEMY_API_KEY || process.env.ALCHEMY_API_KEY;
 
   const configPath = join(CRE_PROJECT_PATH, "chainguard-sentinel", "config.evm-triggered.json");
+  const projectYamlPath = join(CRE_PROJECT_PATH, "project.yaml");
 
   function runSimulate(txHash, evmEventIndex) {
     let originalConfig = null;
@@ -156,6 +159,21 @@ async function main() {
       writeFileSync(configPath, JSON.stringify(config, null, 2));
     } catch (e) {
       console.warn("[CRE listener] Could not inject OPENROUTER_API_KEY into config:", e.message);
+    }
+
+    // CRE project.yaml does not expand env vars; patch in Alchemy key so RPCs don't 401
+    let originalProjectYaml = null;
+    const alchemyKey = creEnv.ALCHEMY_API_KEY;
+    if (alchemyKey) {
+      try {
+        originalProjectYaml = readFileSync(projectYamlPath, "utf8");
+        const patched = originalProjectYaml.replace(/YOUR_ALCHEMY_API_KEY/g, alchemyKey);
+        writeFileSync(projectYamlPath, patched);
+      } catch (e) {
+        console.warn("[CRE listener] Could not patch project.yaml with ALCHEMY_API_KEY:", e.message);
+      }
+    } else {
+      console.warn("[CRE listener] ALCHEMY_API_KEY not set in chain-guard-cre/.env or .env.local — RPC may 401.");
     }
 
     const creEnvPath = join(CRE_PROJECT_PATH, ".env");
@@ -180,6 +198,11 @@ async function main() {
       if (originalConfig != null) {
         try {
           writeFileSync(configPath, originalConfig);
+        } catch (_) {}
+      }
+      if (originalProjectYaml != null) {
+        try {
+          writeFileSync(projectYamlPath, originalProjectYaml);
         } catch (_) {}
       }
       if (code === 0) console.log("[CRE listener] Workflow finished for", txHash);

@@ -65,6 +65,8 @@ import {
   ChevronRight,
   Pencil,
   Check,
+  Minimize2,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -94,6 +96,7 @@ import {
   CRE_CONSUMER_CHAIN_ID,
   type OnchainAssessment,
 } from "@/lib/cre-consumer";
+import { useAnalysisContext } from "@/app/dashboard/analysis-context";
 import { getBlockscoutAddressUrl } from "@/lib/cre/explorer-api";
 import {
   formatTvl,
@@ -147,6 +150,14 @@ export default function ContractDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: contractAddress } = use(params);
+  const _addr = (contractAddress ?? "").toLowerCase().trim();
+  const normalizedContractAddress = _addr.startsWith("0x") ? _addr : `0x${_addr}`;
+  const {
+    pendingAnalysis,
+    setPendingAnalysis,
+    updatePendingAnalysis,
+    clearPendingAnalysis,
+  } = useAnalysisContext();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -203,15 +214,77 @@ export default function ContractDetailPage({
     reset: resetCRERequest,
     txHash: creTxHash,
   } = useRequestCREAnalysis();
+  const effectiveRequestId =
+    lastRequestId ??
+    (pendingAnalysis?.contractAddress === normalizedContractAddress
+      ? (pendingAnalysis.requestId as `0x${string}`)
+      : null);
   const { assessment: creAssessment, refetch: refetchCREAssessment } =
-    useCREAssessment(lastRequestId);
+    useCREAssessment(effectiveRequestId);
   const [creError, setCreError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!lastRequestId) return;
+    if (!effectiveRequestId) return;
     const t = setInterval(() => refetchCREAssessment(), 4000);
     return () => clearInterval(t);
-  }, [lastRequestId, refetchCREAssessment]);
+  }, [effectiveRequestId, refetchCREAssessment]);
+
+  // Restore Full Analysis state from context when returning to this contract page
+  const hasRestoredRef = useRef(false);
+  useEffect(() => {
+    if (!normalizedContractAddress || hasRestoredRef.current) return;
+    if (
+      pendingAnalysis?.contractAddress === normalizedContractAddress &&
+      !lastRequestId
+    ) {
+      hasRestoredRef.current = true;
+      setAnalysisModalOpen(true);
+      setAnalysisStage(
+        pendingAnalysis.stage as
+          | "discovering"
+          | "pre-cre"
+          | "cre"
+          | "post-cre"
+          | "complete"
+          | "error"
+          | "onchain_requested"
+      );
+      setAnalysisLogLines(pendingAnalysis.logLines);
+      setAnalysisError(pendingAnalysis.error ?? null);
+    }
+  }, [normalizedContractAddress, pendingAnalysis, lastRequestId]);
+
+  // Ref to preserve modalCollapsed when persisting (avoid pendingAnalysis in deps to prevent infinite loop)
+  const modalCollapsedRef = useRef(false);
+  if (
+    pendingAnalysis?.contractAddress === normalizedContractAddress &&
+    pendingAnalysis?.modalCollapsed
+  ) {
+    modalCollapsedRef.current = true;
+  }
+  // Persist to context when we have lastRequestId so analysis survives navigation; keep in sync.
+  // Do not depend on pendingAnalysis (would re-run when context updates and cause an infinite loop).
+  useEffect(() => {
+    if (!lastRequestId || !normalizedContractAddress) return;
+    const modalCollapsed = modalCollapsedRef.current;
+    setPendingAnalysis({
+      contractAddress: normalizedContractAddress,
+      requestId: lastRequestId,
+      stage: analysisStage,
+      logLines: analysisLogLines,
+      creAssessment: creAssessment ?? null,
+      error: analysisError,
+      modalCollapsed,
+    });
+  }, [
+    lastRequestId,
+    normalizedContractAddress,
+    analysisStage,
+    analysisLogLines,
+    analysisError,
+    creAssessment,
+    setPendingAnalysis,
+  ]);
 
   // Advance "Risk engine" sub-steps every ~10s while waiting (so user sees simulation progress). Reset when we get result or leave.
   useEffect(() => {
@@ -269,6 +342,9 @@ export default function ContractDetailPage({
     return () => clearInterval(t);
   }, [creWaitingStartTime, creAssessment]);
 
+  // Guard: run completion (enrich + apply + toast) only once per assessment to avoid duplicate toasts/updates
+  const creAssessmentProcessedRef = useRef<string | null>(null);
+
   // When in Full Analysis flow and we get lastRequestId, add a descriptive log line once.
   const lastRequestIdLogRef = useRef(false);
   useEffect(() => {
@@ -292,17 +368,25 @@ export default function ContractDetailPage({
   }, [analysisStage]);
 
   // When Full Analysis got on-chain CRE result: wait for comprehensive report (enrich), then update UI once.
+  // Run only once per requestId so we don't get duplicate toasts or report updates.
   useEffect(() => {
     if (
       !analysisFallbackToOnchain ||
       analysisStage !== "onchain_requested" ||
-      !creAssessment
+      !creAssessment ||
+      !effectiveRequestId
     )
       return;
+    if (creAssessmentProcessedRef.current === effectiveRequestId) return;
+    creAssessmentProcessedRef.current = effectiveRequestId;
+
     const result = analyzeResultFromOnchainAssessment(creAssessment);
     const addr = (data?.address || "").toLowerCase().trim();
     const with0x = addr.startsWith("0x") ? addr : `0x${addr}`;
-    if (!with0x || with0x === "0x") return;
+    if (!with0x || with0x === "0x") {
+      creAssessmentProcessedRef.current = null;
+      return;
+    }
 
     setAnalysisLogLines((prev) =>
       prev[prev.length - 1] === "Preparing comprehensive report…"
@@ -339,7 +423,10 @@ export default function ContractDetailPage({
           description:
             "Comprehensive report saved. Root cause, impact, and recommendations are included.",
         });
-        setTimeout(() => setAnalysisModalOpen(false), 2200);
+        setTimeout(() => {
+          setAnalysisModalOpen(false);
+          clearPendingAnalysis();
+        }, 2200);
       })
       .catch(() => {
         // Enrich failed; save minimal on-chain result so user still has something.
@@ -355,9 +442,12 @@ export default function ContractDetailPage({
           description:
             "Detailed report could not be loaded. Add OPENROUTER_API_KEY to .env.local for full report.",
         });
-        setTimeout(() => setAnalysisModalOpen(false), 2200);
+        setTimeout(() => {
+          setAnalysisModalOpen(false);
+          clearPendingAnalysis();
+        }, 2200);
       });
-  }, [analysisFallbackToOnchain, analysisStage, creAssessment]);
+  }, [analysisFallbackToOnchain, analysisStage, creAssessment, effectiveRequestId, clearPendingAnalysis]);
 
   const handleRequestOnchainCRE = () => {
     if (!data?.address) return;
@@ -680,6 +770,9 @@ export default function ContractDetailPage({
   const handleFullAnalysis = async () => {
     if (!data?.address) return;
     lastRequestIdLogRef.current = false;
+    modalCollapsedRef.current = false;
+    creAssessmentProcessedRef.current = null;
+    clearPendingAnalysis();
     setAnalyzeLoading(true);
     setAnalyzeResult(null);
     setAnalysisError(null);
@@ -952,8 +1045,11 @@ export default function ContractDetailPage({
     <>
       {/* Full-screen Full Analysis progress modal — streaming log style */}
       <AnimatePresence>
-        {analysisModalOpen && (
-          <motion.div
+        {analysisModalOpen &&
+          (!pendingAnalysis ||
+            pendingAnalysis.contractAddress !== normalizedContractAddress ||
+            !pendingAnalysis.modalCollapsed) && (
+            <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -961,7 +1057,7 @@ export default function ContractDetailPage({
             className="fixed inset-0 z-[100] flex items-center justify-center bg-background/95 backdrop-blur-xl"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-emerald-500/5" />
-            <div className="relative z-10 w-full max-w-2xl mx-4">
+            <div className="relative z-10 w-full max-w-5xl mx-4">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -969,17 +1065,52 @@ export default function ContractDetailPage({
                 className="rounded-[2rem] border border-border/50 bg-card/95 shadow-2xl shadow-primary/10 overflow-hidden"
               >
                 <div className="px-8 pt-8 pb-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary">
-                      <Sparkles className="h-6 w-6" />
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/20 text-primary">
+                        <Sparkles className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black tracking-tight text-foreground">
+                          Run Full Analysis
+                        </h2>
+                        <p className="text-xs text-muted-foreground font-medium">
+                          On-chain CRE — same behavior locally and in production
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xl font-black tracking-tight text-foreground">
-                        Run Full Analysis
-                      </h2>
-                      <p className="text-xs text-muted-foreground font-medium">
-                        On-chain CRE — same behavior locally and in production
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          modalCollapsedRef.current = true;
+                          updatePendingAnalysis({ modalCollapsed: true });
+                        }}
+                      >
+                        <Minimize2 className="h-4 w-4 mr-1" />
+                        Collapse
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => {
+                          lastRequestIdLogRef.current = false;
+                          modalCollapsedRef.current = false;
+                          creAssessmentProcessedRef.current = null;
+                          clearPendingAnalysis();
+                          resetCRERequest();
+                          setAnalysisModalOpen(false);
+                          setAnalysisStage("discovering");
+                          setAnalysisLogLines([]);
+                          setAnalysisError(null);
+                        }}
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Cancel
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1271,7 +1402,16 @@ export default function ContractDetailPage({
                           variant="outline"
                           size="sm"
                           className="border-amber-500/50 text-amber-700 dark:text-amber-400"
-                          onClick={() => setAnalysisModalOpen(false)}
+                          onClick={() => {
+                            modalCollapsedRef.current = false;
+                            creAssessmentProcessedRef.current = null;
+                            clearPendingAnalysis();
+                            setAnalysisModalOpen(false);
+                            setAnalysisStage("discovering");
+                            setAnalysisLogLines([]);
+                            setAnalysisError(null);
+                            resetCRERequest();
+                          }}
                         >
                           Close
                         </Button>
@@ -1284,6 +1424,29 @@ export default function ContractDetailPage({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating pill when Full Analysis is collapsed */}
+      {pendingAnalysis?.contractAddress === normalizedContractAddress &&
+        pendingAnalysis?.modalCollapsed && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed bottom-6 right-6 z-[99]"
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              className="rounded-full shadow-lg border bg-card/95 backdrop-blur"
+              onClick={() => {
+                modalCollapsedRef.current = false;
+                updatePendingAnalysis({ modalCollapsed: false });
+              }}
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Analysis in progress…
+            </Button>
+          </motion.div>
+        )}
 
       <div className="mx-auto w-full space-y-8 p-6 lg:p-10">
         {/* Header & Breadcrumb */}

@@ -80,6 +80,52 @@ export class ContractStorage {
     }
 
     /**
+     * Normalize address for comparison (lowercase, 0x prefix).
+     */
+    static normalizeAddress(addr: string): string {
+        if (!addr) return "";
+        const clean = (addr || "").toLowerCase().trim();
+        return clean.startsWith("0x") ? clean : `0x${clean}`;
+    }
+
+    /**
+     * Merge server/on-chain contracts with local cache so that:
+     * - All server contracts are included (source of truth for list from chain/server).
+     * - Any contract only in local (e.g. newly added before sync) is kept.
+     * - For contracts in both, local fullAnalysis, latestScan, metrics are preserved so reports persist.
+     * Use this before saveContracts when applying GET /api/sync response so the frontend cache is not lost.
+     */
+    static mergeWithLocalCache(serverContracts: DashboardContract[]): DashboardContract[] {
+        if (typeof window === "undefined") return serverContracts ?? [];
+        const local = this.getContracts();
+        const norm = (a: string) => this.normalizeAddress(a);
+        const byAddr = new Map<string, DashboardContract>();
+        for (const c of serverContracts ?? []) {
+            const addr = norm(c.address);
+            if (addr) byAddr.set(addr, { ...c, address: addr });
+        }
+        for (const c of local) {
+            const addr = norm(c.address);
+            if (!addr) continue;
+            const existing = byAddr.get(addr);
+            if (existing) {
+                byAddr.set(addr, {
+                    ...existing,
+                    ...(c.fullAnalysis != null ? { fullAnalysis: c.fullAnalysis } : {}),
+                    ...(c.latestScan != null ? { latestScan: c.latestScan } : {}),
+                    ...(c.metrics != null && Object.keys(c.metrics).length > 0 ? { metrics: c.metrics } : {}),
+                    ...(c.discoveredTokens != null && c.discoveredTokens.length > 0 ? { discoveredTokens: c.discoveredTokens } : {}),
+                    name: c.name && c.name !== "New Contract" && c.name !== "Unknown" ? c.name : existing.name,
+                    lastUpdate: c.lastUpdate || existing.lastUpdate,
+                });
+            } else {
+                byAddr.set(addr, { ...c, address: addr });
+            }
+        }
+        return Array.from(byAddr.values());
+    }
+
+    /**
      * Add a new contract
      */
     static addContract(contract: Omit<DashboardContract, "id">): DashboardContract {
