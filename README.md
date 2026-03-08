@@ -40,13 +40,13 @@ ChainGuard Sentinel uses **Chainlink CRE** to run the full pipeline (EVM reads �
   The CRE workflow is triggered by the `RiskAnalysisRequested` event emitted by the **ChainGuardCREConsumer** contract when a user (or the interval job) calls `requestRiskAnalysis(contractAddress, chainSelectorName)`.
 
 - **Blockchain + external systems**  
-  The workflow (in the [chain-guard-cre](https://github.com/your-org/chain-guard-cre) repo):
+  The workflow (in the [chain-guard-cre](https://github.com/Sobilo34/chain-guard-cre) repo):
   - Reads **on-chain** contract state (balances, tokens) via EVM.
   - Fetches **market data** (e.g. Chainlink Data Feeds / price feeds) and can use **OpenRouter/Gemini** for AI risk analysis.
   - Writes the **risk report** back on-chain via the consumer contract so the frontend can read it with `getAssessment(requestId)`.
 
-- **Simulation and production**  
-  - **Local:** Run `npm run script:cre-listener` in this repo; it watches for `RiskAnalysisRequested` and runs `cre workflow simulate` in chain-guard-cre so the report is written to Sepolia.  
+- **Simulation and production**
+  - **Local:** Run `npm run script:cre-listener` in this repo; it watches for `RiskAnalysisRequested` and runs `cre workflow simulate` in chain-guard-cre so the report is written to Sepolia.
   - **Production:** Deploy the same workflow to a Chainlink DON; the DON listens for the event and writes the report. No change to the frontend—only where the workflow runs.
 
 This satisfies the hackathon requirement: **build/simulate/deploy a CRE workflow that integrates at least one blockchain with an external API, system, data source, or LLM**, demonstrated via CRE CLI simulation or live DON deployment.
@@ -55,13 +55,13 @@ This satisfies the hackathon requirement: **build/simulate/deploy a CRE workflow
 
 ## Stack and architecture
 
-| Layer            | Technology |
-|-----------------|------------|
-| Frontend         | Next.js 16, React, Tailwind, Vercel |
-| Wallet / chain   | Wagmi, viem, Sepolia |
-| CRE integration  | Consumer contract (Sepolia), EVM log trigger, on-chain report storage |
-| Workflow runtime | [chain-guard-cre](https://github.com/your-org/chain-guard-cre) (CRE CLI simulate or DON) |
-| Contracts        | [chain-guard-smart-contract](https://github.com/your-org/chain-guard-smart-contract) (ChainGuardRegistry, ChainGuardCREConsumer) |
+| Layer            | Technology                                                                                                                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend         | Next.js 16, React, Tailwind, Vercel                                                                                              |
+| Wallet / chain   | Wagmi, viem, Sepolia                                                                                                             |
+| CRE integration  | Consumer contract (Sepolia), EVM log trigger, on-chain report storage                                                            |
+| Workflow runtime | [chain-guard-cre](https://github.com/Sobilo34/chain-guard-cre) (CRE CLI simulate or DON)                                         |
+| Contracts        | [chain-guard-smart-contract](https://github.com/Sobilo34/chain-guard-smart-contract) (ChainGuardRegistry, ChainGuardCREConsumer) |
 
 **Flow (high level):**
 
@@ -87,52 +87,52 @@ As per the hackathon submission guidelines, here are the files in **this reposit
 
 ### CRE consumer and on-chain integration
 
-| File | Purpose |
-|------|--------|
-| [lib/cre-consumer.ts](lib/cre-consumer.ts) | CRE consumer address, chain id, `parseOnchainAssessment` for reading reports |
-| [lib/cre-consumer-abi.ts](lib/cre-consumer-abi.ts) | ABI for `requestRiskAnalysis` and `getAssessment` |
-| [hooks/use-cre-onchain.ts](hooks/use-cre-onchain.ts) | `useRequestCREAnalysis`, `useCREAssessment` (wagmi/viem read contract) |
-| [app/api/cre/trigger-analysis/route.ts](app/api/cre/trigger-analysis/route.ts) | Server-side: sends `requestRiskAnalysis` for all contracts (cron/interval) |
-| [app/api/cre/assessment/route.ts](app/api/cre/assessment/route.ts) | Server-side: reads `getAssessment(requestId)` for polling |
-| [app/dashboard/analysis-context.tsx](app/dashboard/analysis-context.tsx) | Persists analysis state and polls CRE assessment |
-| [app/dashboard/contracts/[id]/page.tsx](app/dashboard/contracts/[id]/page.tsx) | Run Full Analysis UI, calls consumer, applies on-chain result |
-| [app/dashboard/page.tsx](app/dashboard/page.tsx) | Trigger-analysis at interval, persists requestIds, polls assessments |
-| [app/dashboard/contracts/page.tsx](app/dashboard/contracts/page.tsx) | Contract list and CRE-related UI |
-| [scripts/cre-evm-listener.mjs](scripts/cre-evm-listener.mjs) | Watches `RiskAnalysisRequested`, runs `cre workflow simulate` |
-| [scripts/run-full-analysis-flow.mjs](scripts/run-full-analysis-flow.mjs) | Script to run full flow (tx → poll `getAssessment`) |
+| File                                                                           | Purpose                                                                      |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| [lib/cre-consumer.ts](lib/cre-consumer.ts)                                     | CRE consumer address, chain id, `parseOnchainAssessment` for reading reports |
+| [lib/cre-consumer-abi.ts](lib/cre-consumer-abi.ts)                             | ABI for `requestRiskAnalysis` and `getAssessment`                            |
+| [hooks/use-cre-onchain.ts](hooks/use-cre-onchain.ts)                           | `useRequestCREAnalysis`, `useCREAssessment` (wagmi/viem read contract)       |
+| [app/api/cre/trigger-analysis/route.ts](app/api/cre/trigger-analysis/route.ts) | Server-side: sends `requestRiskAnalysis` for all contracts (cron/interval)   |
+| [app/api/cre/assessment/route.ts](app/api/cre/assessment/route.ts)             | Server-side: reads `getAssessment(requestId)` for polling                    |
+| [app/dashboard/analysis-context.tsx](app/dashboard/analysis-context.tsx)       | Persists analysis state and polls CRE assessment                             |
+| [app/dashboard/contracts/[id]/page.tsx](app/dashboard/contracts/[id]/page.tsx) | Run Full Analysis UI, calls consumer, applies on-chain result                |
+| [app/dashboard/page.tsx](app/dashboard/page.tsx)                               | Trigger-analysis at interval, persists requestIds, polls assessments         |
+| [app/dashboard/contracts/page.tsx](app/dashboard/contracts/page.tsx)           | Contract list and CRE-related UI                                             |
+| [scripts/cre-evm-listener.mjs](scripts/cre-evm-listener.mjs)                   | Watches `RiskAnalysisRequested`, runs `cre workflow simulate`                |
+| [scripts/run-full-analysis-flow.mjs](scripts/run-full-analysis-flow.mjs)       | Script to run full flow (tx → poll `getAssessment`)                          |
 
 ### CRE-related API and lib (analysis, discovery, feeds)
 
-| File | Purpose |
-|------|--------|
-| [app/api/cre/analyze/route.ts](app/api/cre/analyze/route.ts) | Optional server-side analyze (pre-CRE + CRE simulate + post-CRE AI) |
-| [app/api/cre/analyze/stream/route.ts](app/api/cre/analyze/stream/route.ts) | Streaming analyze with CRE |
-| [app/api/cre/simulate/route.ts](app/api/cre/simulate/route.ts) | CRE simulate API |
-| [app/api/cre/enrich/route.ts](app/api/cre/enrich/route.ts) | Enrich CRE output with AI |
-| [app/api/cre/portfolio/route.ts](app/api/cre/portfolio/route.ts) | Portfolio/TVL using chain data |
-| [app/api/cron/scan/route.ts](app/api/cron/scan/route.ts) | Cron entrypoint; coordinates with trigger-analysis |
-| [lib/cre/run-discovery.ts](lib/cre/run-discovery.ts) | Contract discovery (EVM reads, optional AI naming) |
-| [lib/cre/feeds.ts](lib/cre/feeds.ts) | Chainlink price feed addresses |
-| [lib/cre/chainlink-prices.ts](lib/cre/chainlink-prices.ts) | Chainlink price feed usage |
-| [lib/cre/build-config.ts](lib/cre/build-config.ts) | Build CRE config from discovery |
-| [lib/cre/run-simulate.ts](lib/cre/run-simulate.ts) | Run CRE simulation |
-| [lib/cre/serverless-check.ts](lib/cre/serverless-check.ts) | CRE availability check in serverless |
-| [lib/cre/post-cre-ai.ts](lib/cre/post-cre-ai.ts) | Post-CRE AI step |
-| [lib/api.ts](lib/api.ts) | `applyOnchainAssessmentToContractStorage`, CRE-related types |
-| [lib/storage.ts](lib/storage.ts) | Persists contracts and alerts; merge with CRE results |
-| [lib/email-templates/risk-alert.ts](lib/email-templates/risk-alert.ts) | Email alerts for risk events |
+| File                                                                       | Purpose                                                             |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [app/api/cre/analyze/route.ts](app/api/cre/analyze/route.ts)               | Optional server-side analyze (pre-CRE + CRE simulate + post-CRE AI) |
+| [app/api/cre/analyze/stream/route.ts](app/api/cre/analyze/stream/route.ts) | Streaming analyze with CRE                                          |
+| [app/api/cre/simulate/route.ts](app/api/cre/simulate/route.ts)             | CRE simulate API                                                    |
+| [app/api/cre/enrich/route.ts](app/api/cre/enrich/route.ts)                 | Enrich CRE output with AI                                           |
+| [app/api/cre/portfolio/route.ts](app/api/cre/portfolio/route.ts)           | Portfolio/TVL using chain data                                      |
+| [app/api/cron/scan/route.ts](app/api/cron/scan/route.ts)                   | Cron entrypoint; coordinates with trigger-analysis                  |
+| [lib/cre/run-discovery.ts](lib/cre/run-discovery.ts)                       | Contract discovery (EVM reads, optional AI naming)                  |
+| [lib/cre/feeds.ts](lib/cre/feeds.ts)                                       | Chainlink price feed addresses                                      |
+| [lib/cre/chainlink-prices.ts](lib/cre/chainlink-prices.ts)                 | Chainlink price feed usage                                          |
+| [lib/cre/build-config.ts](lib/cre/build-config.ts)                         | Build CRE config from discovery                                     |
+| [lib/cre/run-simulate.ts](lib/cre/run-simulate.ts)                         | Run CRE simulation                                                  |
+| [lib/cre/serverless-check.ts](lib/cre/serverless-check.ts)                 | CRE availability check in serverless                                |
+| [lib/cre/post-cre-ai.ts](lib/cre/post-cre-ai.ts)                           | Post-CRE AI step                                                    |
+| [lib/api.ts](lib/api.ts)                                                   | `applyOnchainAssessmentToContractStorage`, CRE-related types        |
+| [lib/storage.ts](lib/storage.ts)                                           | Persists contracts and alerts; merge with CRE results               |
+| [lib/email-templates/risk-alert.ts](lib/email-templates/risk-alert.ts)     | Email alerts for risk events                                        |
 
 ### Config and UI
 
-| File | Purpose |
-|------|--------|
+| File                                                             | Purpose                                                   |
+| ---------------------------------------------------------------- | --------------------------------------------------------- |
 | [app/dashboard/scan-context.tsx](app/dashboard/scan-context.tsx) | Scan context (legacy; trigger-analysis used for interval) |
-| [app/dashboard/alerts/page.tsx](app/dashboard/alerts/page.tsx) | Alerts feed (alerts may be driven by CRE results) |
-| [app/page.tsx](app/page.tsx) | Landing; mentions CRE/Chainlink |
-| [components/web3-provider.tsx](components/web3-provider.tsx) | Web3 config for wallet and chain (Sepolia for consumer) |
-| [vercel.json](vercel.json) | Cron for `/api/cre/trigger-analysis` and `/api/cron/scan` |
+| [app/dashboard/alerts/page.tsx](app/dashboard/alerts/page.tsx)   | Alerts feed (alerts may be driven by CRE results)         |
+| [app/page.tsx](app/page.tsx)                                     | Landing; mentions CRE/Chainlink                           |
+| [components/web3-provider.tsx](components/web3-provider.tsx)     | Web3 config for wallet and chain (Sepolia for consumer)   |
+| [vercel.json](vercel.json)                                       | Cron for `/api/cre/trigger-analysis` and `/api/cron/scan` |
 
-The **CRE workflow** itself (EVM trigger, EVM reads, Chainlink feeds, AI, write report) lives in the [chain-guard-cre](https://github.com/your-org/chain-guard-cre) repository.
+The **CRE workflow** itself (EVM trigger, EVM reads, Chainlink feeds, AI, write report) lives in the [chain-guard-cre](https://github.com/Sobilo34/chain-guard-cre) repository.
 
 ---
 
@@ -197,10 +197,10 @@ With the dashboard open, the app will call the trigger-analysis API every 30s an
 
 ## Related repositories
 
-- **[chain-guard-cre](https://github.com/your-org/chain-guard-cre)** – CRE workflow (EVM log trigger, EVM reads, Chainlink feeds, AI, on-chain report).
-- **[chain-guard-smart-contract](https://github.com/your-org/chain-guard-smart-contract)** – ChainGuardRegistry and ChainGuardCREConsumer (Sepolia).
+- **[chain-guard-cre](https://github.com/Sobilo34/chain-guard-cre)** – CRE workflow (EVM log trigger, EVM reads, Chainlink feeds, AI, on-chain report).
+- **[chain-guard-smart-contract](https://github.com/Sobilo34/chain-guard-smart-contract)** – ChainGuardRegistry and ChainGuardCREConsumer (Sepolia).
 
-Replace `your-org` with your GitHub username or organization in the links above.
+Replace `Sobilo34` with your GitHub username or organization in the links above.
 
 ---
 
