@@ -78,19 +78,18 @@ function AnalysisPoller() {
     return () => clearInterval(t);
   }, [requestId, refetch]);
 
-  const lastPushedAssessmentRef = useRef<OnchainAssessment | null>(null);
+  // Track by requestId so we only push once per assessment (assessment is a new object ref each render)
+  const lastPushedRequestIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!requestId) {
-      lastPushedAssessmentRef.current = null;
-      return;
-    }
-  }, [requestId]);
-  useEffect(() => {
-    if (!assessment || !pendingAnalysis) return;
-    if (lastPushedAssessmentRef.current === assessment) return;
-    lastPushedAssessmentRef.current = assessment;
+    if (!requestId || !assessment) return;
+    if (lastPushedRequestIdRef.current === requestId) return;
+    lastPushedRequestIdRef.current = requestId;
     updatePendingAnalysis({ creAssessment: assessment });
-  }, [assessment, pendingAnalysis, updatePendingAnalysis]);
+  }, [requestId, assessment, updatePendingAnalysis]);
+
+  useEffect(() => {
+    if (!requestId) lastPushedRequestIdRef.current = null;
+  }, [requestId]);
 
   return null;
 }

@@ -1,97 +1,209 @@
-# ChainGuard Sentinel UI
+# ChainGuard Sentinel
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+**AI-powered smart contract risk monitoring—decentralized by Chainlink CRE.**
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/bilal-oyeleke-solius-projects/v0-chain-guard-sentinel-ui)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/uJIsdzbyi5p)
+ChainGuard Sentinel is a monitoring and alerting system for **already-deployed** smart contracts. It detects market-based risks (depegs, volatility spikes, liquidity drops) using AI and Chainlink’s Runtime Environment (CRE), without requiring any change to your contract code.
 
-## Overview
+---
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## The problem we address
 
-## Deployment
+Smart contract owners face ongoing risk after deployment: market moves, liquidity events, and oracle deviations can lead to liquidations, depegs, or exploits. Existing tools often:
 
-Your project is live at:
+- Rely on **centralized** dashboards or bots (single point of failure).
+- Don’t **orchestrate** monitoring, AI analysis, and alerts in one decentralized flow.
+- Require custom infra for **multi-chain** and high-frequency data.
 
-**[https://vercel.com/bilal-oyeleke-solius-projects/v0-chain-guard-sentinel-ui](https://vercel.com/bilal-oyeleke-solius-projects/v0-chain-guard-sentinel-ui)**
+ChainGuard Sentinel uses **Chainlink CRE** to run the full pipeline (EVM reads → market data → AI analysis → on-chain report) as a **single decentralized workflow**, so execution is tamper-resistant, verifiable, and scalable.
 
-## Build your app
+---
 
-Continue building your app on:
+## How we address it
 
-**[https://v0.app/chat/uJIsdzbyi5p](https://v0.app/chat/uJIsdzbyi5p)**
+1. **One-click risk analysis**  
+   You add a contract address; the app sends a request to a **CRE consumer contract** on Sepolia. A CRE workflow (EVM log trigger) picks up the event, reads contract state and market data, runs AI risk analysis, and writes the report back on-chain. The dashboard shows risk level, score, and summary without you running any backend.
 
-## Scan interval and automatic Full Analysis
+2. **Automatic scanning at interval**  
+   The dashboard (or Vercel Cron in production) calls a trigger API at a configurable interval (e.g. every 30 seconds for testing, 15 minutes in production). That API sends `requestRiskAnalysis` for every monitored contract. CRE (local listener or DON) runs the workflow and writes reports; the UI polls and updates “Last updated” so you can confirm the cron is working.
 
-The dashboard runs a background task at an interval (default 15 minutes). You can set it to 30 seconds for testing.
+3. **Persistence and clarity**  
+   Contracts and analysis results are cached in the frontend; “Last updated” and relative timestamps are shown across the dashboard and contract pages so you can track when each contract was last analyzed.
 
-- **Interval (e.g. 30s testing)**  
-  In `.env.local`:
-  ```
-  NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS=30000
-  ```
-  With the dashboard open, the app calls **Full Analysis trigger** and cron/scan at this interval.
+4. **No backend required**  
+   The flow is: **Frontend → Consumer contract (tx) → CRE workflow → Consumer contract (report)**. The Next.js app only talks to the chain and to its own API routes; the CRE workflow runs locally (`cre workflow simulate`) or on a Chainlink DON.
 
-- **Automatic Full Analysis at interval**  
-  To have Full Analysis run automatically for all monitored contracts (no manual "Run Full Analysis" click):
-  1. **Local:** Set a **funded Sepolia wallet** private key in `.env.local`:
-     ```
-     CRE_AUTOMATION_PRIVATE_KEY=0x...   # or CRE_REQUEST_PRIVATE_KEY
-     ```
-     Keep the **CRE listener** running in a separate terminal (`npm run script:cre-listener`). Each interval the dashboard calls `POST /api/cre/trigger-analysis`; the API sends `requestRiskAnalysis` for each contract; the listener picks up the event and runs the workflow, then writes the report on-chain. The frontend will see new results when it polls or refreshes.
-  2. **Production (CRE on DON):** Deploy the CRE workflow to a Chainlink DON. In your host (e.g. Vercel), set:
-     - `CRE_AUTOMATION_PRIVATE_KEY` (or `CRE_REQUEST_PRIVATE_KEY`) — same funded Sepolia wallet.
-     - Optional: Vercel Cron (see `vercel.json`) to `POST /api/cre/trigger-analysis` at the desired schedule (e.g. every 5–15 minutes). If you don’t set cron, only the “Run Full Analysis” button will trigger analysis; with cron, the DON will run Full Analysis for all contracts on schedule.
+---
 
-  So: **same flow locally and in production** — something (dashboard timer or cron) calls the trigger API → API sends tx(s) to the consumer → CRE (listener or DON) runs the workflow and writes the report.
+## How we use CRE
 
-## Smart Contracts
+- **EVM log trigger**  
+  The CRE workflow is triggered by the `RiskAnalysisRequested` event emitted by the **ChainGuardCREConsumer** contract when a user (or the interval job) calls `requestRiskAnalysis(contractAddress, chainSelectorName)`.
 
-ChainGuard registry lives in **chain-guard-smart-contract**. To deploy and use the on-chain registry:
+- **Blockchain + external systems**  
+  The workflow (in the [chain-guard-cre](https://github.com/your-org/chain-guard-cre) repo):
+  - Reads **on-chain** contract state (balances, tokens) via EVM.
+  - Fetches **market data** (e.g. Chainlink Data Feeds / price feeds) and can use **OpenRouter/Gemini** for AI risk analysis.
+  - Writes the **risk report** back on-chain via the consumer contract so the frontend can read it with `getAssessment(requestId)`.
 
-1. `cd chain-guard-smart-contract`
-2. Copy `.env.example` → `.env`; set `CHAINGUARD_REGISTRY_PRIVATE_KEY` (Sepolia deployer) and `SEPOLIA_RPC_URL`
-3. Run `./deploy.sh` (or `source .env && forge script script/Deploy.s.sol --rpc-url "$SEPOLIA_RPC_URL" --broadcast`)
-4. Add the deployed address to `chain-guard/.env.local`: `CHAINGUARD_REGISTRY_ADDRESS=0x...`, plus `CHAINGUARD_REGISTRY_PRIVATE_KEY` and `SEPOLIA_RPC_URL`
+- **Simulation and production**  
+  - **Local:** Run `npm run script:cre-listener` in this repo; it watches for `RiskAnalysisRequested` and runs `cre workflow simulate` in chain-guard-cre so the report is written to Sepolia.  
+  - **Production:** Deploy the same workflow to a Chainlink DON; the DON listens for the event and writes the report. No change to the frontend—only where the workflow runs.
 
-## ChainGuard CRE + Smart Contract (how they work together)
+This satisfies the hackathon requirement: **build/simulate/deploy a CRE workflow that integrates at least one blockchain with an external API, system, data source, or LLM**, demonstrated via CRE CLI simulation or live DON deployment.
 
-- **chain-guard** (this app): Frontend + Next.js API. Users add contracts, run **Full Analysis**, and see alerts. Full Analysis sends a transaction to the **CRE consumer contract** on Sepolia; no backend CRE runs in this app.
-- **chain-guard-smart-contract**: Deploys **ChainGuardRegistry** (contracts/alerts) and **ChainGuardCREConsumer**. When a user runs Full Analysis, the frontend calls `requestRiskAnalysis(contractAddress, chainSelectorName)` on the consumer; the contract emits an event.
-- **chain-guard-cre** (chainguard-sentinel): The **CRE workflow** that reacts to that event. Run it via Chainlink DON or locally (`cre run`). It reads the event, fetches contract + market data, runs AI, and writes the report back to the consumer contract. The frontend then reads the result with `getAssessment(requestId)`.
+---
 
-So: **Frontend → Consumer contract (tx) → CRE workflow (chain-guard-cre) → Consumer contract (report)**. The app does not use bridge-api; the CRE workflow runs from chainguard-sentinel only (locally via the listener or on a DON).
+## Stack and architecture
 
-## Production configuration (frontend only)
+| Layer            | Technology |
+|-----------------|------------|
+| Frontend         | Next.js 16, React, Tailwind, Vercel |
+| Wallet / chain   | Wagmi, viem, Sepolia |
+| CRE integration  | Consumer contract (Sepolia), EVM log trigger, on-chain report storage |
+| Workflow runtime | [chain-guard-cre](https://github.com/your-org/chain-guard-cre) (CRE CLI simulate or DON) |
+| Contracts        | [chain-guard-smart-contract](https://github.com/your-org/chain-guard-smart-contract) (ChainGuardRegistry, ChainGuardCREConsumer) |
 
-You only deploy the **frontend** (and use already-deployed **smart contracts** on Sepolia). Set these in your host’s environment (e.g. Vercel → Project → Settings → Environment Variables) so the app works the same as locally:
+**Flow (high level):**
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `NEXT_PUBLIC_CHAINGUARD_CRE_CONSUMER_ADDRESS` | Yes | CRE consumer contract address (from chain-guard-smart-contract deploy). |
-| `NEXT_PUBLIC_CRE_CONSUMER_CHAIN_ID` | Yes | `11155111` (Sepolia). |
-| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | Recommended | Alchemy Sepolia URL so the wallet uses a fast RPC: `https://eth-sepolia.g.alchemy.com/v2/YOUR_ALCHEMY_API_KEY`. |
-| `NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS` | Optional | Poll interval in ms (e.g. `30000` for 30s). Dashboard calls trigger-analysis + cron at this interval. |
-| `CRE_AUTOMATION_PRIVATE_KEY` or `CRE_REQUEST_PRIVATE_KEY` | For auto Full Analysis | Funded Sepolia wallet used by `POST /api/cre/trigger-analysis` to send `requestRiskAnalysis` for all contracts. Omit to use only the manual "Run Full Analysis" button. |
-| `CHAINGUARD_REGISTRY_ADDRESS` | If using on-chain registry | Registry contract address (Sepolia). |
-| `SEPOLIA_RPC_URL` or `ALCHEMY_API_KEY` | If using on-chain registry / trigger API | Used by server-side code (cron, registry, trigger-analysis). Same Alchemy URL or key. |
+```
+User / Cron → Frontend → requestRiskAnalysis(tx) → Consumer contract
+                                                          ↓
+                                              RiskAnalysisRequested event
+                                                          ↓
+                                              CRE workflow (EVM trigger)
+                                                          ↓
+                                              EVM reads + feeds + AI → report
+                                                          ↓
+                                              Write report on consumer contract
+                                                          ↓
+Frontend ← getAssessment(requestId) ← Consumer contract
+```
 
-**RPC in production:** The frontend uses `NEXT_PUBLIC_SEPOLIA_RPC_URL` for wallet txs and reads (Full Analysis, consumer contract). Set it in Vercel (or your host) to your Alchemy Sepolia URL; the key will be in the URL and is public (browser). For server-side Sepolia (registry, etc.), set `SEPOLIA_RPC_URL` or `ALCHEMY_API_KEY` as well.
+---
 
-**CRE workflow RPC:** The CRE workflow does **not** run on Vercel. It runs where you start it (e.g. your machine with `cre run`, or a VPS, or a Chainlink DON). RPC for the workflow is configured there:
+## Link to all files that use Chainlink
 
-- **Local / VPS:** In **chain-guard-cre**, edit `project.yaml` and replace `YOUR_ALCHEMY_API_KEY` (or `ALCHEMY_API_KEY`) with your real Alchemy key so the workflow uses Alchemy for Sepolia/mainnet. If you run the workflow on a server, put the same key in that server’s env or in `project.yaml` there.
-- **Chainlink DON:** When you deploy the workflow with `cre workflow deploy`, the DON uses the RPC config from the `project.yaml` in the repo you deploy from. Use Alchemy URLs there (with your key) before deploying so the DON uses a fast RPC for “Writing report on-chain”.
+As per the hackathon submission guidelines, here are the files in **this repository** that use or integrate with Chainlink (CRE consumer contract, CRE triggers, or Chainlink-related config):
 
-So: **frontend production** = env vars in Vercel (including `NEXT_PUBLIC_SEPOLIA_RPC_URL`). **CRE production** = RPC in `project.yaml` (or DON config) wherever the workflow actually runs.
+### CRE consumer and on-chain integration
 
-## How It Works
+| File | Purpose |
+|------|--------|
+| [lib/cre-consumer.ts](lib/cre-consumer.ts) | CRE consumer address, chain id, `parseOnchainAssessment` for reading reports |
+| [lib/cre-consumer-abi.ts](lib/cre-consumer-abi.ts) | ABI for `requestRiskAnalysis` and `getAssessment` |
+| [hooks/use-cre-onchain.ts](hooks/use-cre-onchain.ts) | `useRequestCREAnalysis`, `useCREAssessment` (wagmi/viem read contract) |
+| [app/api/cre/trigger-analysis/route.ts](app/api/cre/trigger-analysis/route.ts) | Server-side: sends `requestRiskAnalysis` for all contracts (cron/interval) |
+| [app/api/cre/assessment/route.ts](app/api/cre/assessment/route.ts) | Server-side: reads `getAssessment(requestId)` for polling |
+| [app/dashboard/analysis-context.tsx](app/dashboard/analysis-context.tsx) | Persists analysis state and polls CRE assessment |
+| [app/dashboard/contracts/[id]/page.tsx](app/dashboard/contracts/[id]/page.tsx) | Run Full Analysis UI, calls consumer, applies on-chain result |
+| [app/dashboard/page.tsx](app/dashboard/page.tsx) | Trigger-analysis at interval, persists requestIds, polls assessments |
+| [app/dashboard/contracts/page.tsx](app/dashboard/contracts/page.tsx) | Contract list and CRE-related UI |
+| [scripts/cre-evm-listener.mjs](scripts/cre-evm-listener.mjs) | Watches `RiskAnalysisRequested`, runs `cre workflow simulate` |
+| [scripts/run-full-analysis-flow.mjs](scripts/run-full-analysis-flow.mjs) | Script to run full flow (tx → poll `getAssessment`) |
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+### CRE-related API and lib (analysis, discovery, feeds)
 
-   <!-- cd chain-guard
-   npm run script:cre-listener -->
+| File | Purpose |
+|------|--------|
+| [app/api/cre/analyze/route.ts](app/api/cre/analyze/route.ts) | Optional server-side analyze (pre-CRE + CRE simulate + post-CRE AI) |
+| [app/api/cre/analyze/stream/route.ts](app/api/cre/analyze/stream/route.ts) | Streaming analyze with CRE |
+| [app/api/cre/simulate/route.ts](app/api/cre/simulate/route.ts) | CRE simulate API |
+| [app/api/cre/enrich/route.ts](app/api/cre/enrich/route.ts) | Enrich CRE output with AI |
+| [app/api/cre/portfolio/route.ts](app/api/cre/portfolio/route.ts) | Portfolio/TVL using chain data |
+| [app/api/cron/scan/route.ts](app/api/cron/scan/route.ts) | Cron entrypoint; coordinates with trigger-analysis |
+| [lib/cre/run-discovery.ts](lib/cre/run-discovery.ts) | Contract discovery (EVM reads, optional AI naming) |
+| [lib/cre/feeds.ts](lib/cre/feeds.ts) | Chainlink price feed addresses |
+| [lib/cre/chainlink-prices.ts](lib/cre/chainlink-prices.ts) | Chainlink price feed usage |
+| [lib/cre/build-config.ts](lib/cre/build-config.ts) | Build CRE config from discovery |
+| [lib/cre/run-simulate.ts](lib/cre/run-simulate.ts) | Run CRE simulation |
+| [lib/cre/serverless-check.ts](lib/cre/serverless-check.ts) | CRE availability check in serverless |
+| [lib/cre/post-cre-ai.ts](lib/cre/post-cre-ai.ts) | Post-CRE AI step |
+| [lib/api.ts](lib/api.ts) | `applyOnchainAssessmentToContractStorage`, CRE-related types |
+| [lib/storage.ts](lib/storage.ts) | Persists contracts and alerts; merge with CRE results |
+| [lib/email-templates/risk-alert.ts](lib/email-templates/risk-alert.ts) | Email alerts for risk events |
+
+### Config and UI
+
+| File | Purpose |
+|------|--------|
+| [app/dashboard/scan-context.tsx](app/dashboard/scan-context.tsx) | Scan context (legacy; trigger-analysis used for interval) |
+| [app/dashboard/alerts/page.tsx](app/dashboard/alerts/page.tsx) | Alerts feed (alerts may be driven by CRE results) |
+| [app/page.tsx](app/page.tsx) | Landing; mentions CRE/Chainlink |
+| [components/web3-provider.tsx](components/web3-provider.tsx) | Web3 config for wallet and chain (Sepolia for consumer) |
+| [vercel.json](vercel.json) | Cron for `/api/cre/trigger-analysis` and `/api/cron/scan` |
+
+The **CRE workflow** itself (EVM trigger, EVM reads, Chainlink feeds, AI, write report) lives in the [chain-guard-cre](https://github.com/your-org/chain-guard-cre) repository.
+
+---
+
+## Quick start
+
+### Prerequisites
+
+- Node.js 18+
+- A funded Sepolia wallet (for sending `requestRiskAnalysis` and for CRE automation)
+- [Chainlink CRE CLI](https://github.com/smartcontractkit/cre-cli) installed (for local listener)
+
+### 1. Install and configure
+
+```bash
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` and set at least:
+
+- `NEXT_PUBLIC_CHAINGUARD_CRE_CONSUMER_ADDRESS` – consumer contract (from chain-guard-smart-contract deploy)
+- `NEXT_PUBLIC_CRE_CONSUMER_CHAIN_ID=11155111`
+- `NEXT_PUBLIC_SEPOLIA_RPC_URL` or `ALCHEMY_API_KEY` – for Sepolia RPC
+- `CRE_AUTOMATION_PRIVATE_KEY` or `CRE_REQUEST_PRIVATE_KEY` – for interval-triggered analysis (optional; omit to use only manual “Run Full Analysis”)
+
+### 2. Run the app
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000), connect your wallet (Sepolia), and add a contract.
+
+### 3. Run the CRE listener (local simulation)
+
+So that “Run Full Analysis” actually runs the workflow and writes the report on-chain:
+
+```bash
+npm run script:cre-listener
+```
+
+Keep this running in a separate terminal. It watches for `RiskAnalysisRequested` on the consumer contract and runs `cre workflow simulate` in the **chain-guard-cre** repo (clone it next to chain-guard or set `CRE_PROJECT_PATH`). Configure chain-guard-cre with Alchemy RPC and OpenRouter/Gemini (see chain-guard-cre README).
+
+### 4. Optional: automatic scanning every 30 seconds
+
+In `.env.local`:
+
+```env
+NEXT_PUBLIC_CHAIN_GUARD_SCAN_INTERVAL_MS=30000
+```
+
+With the dashboard open, the app will call the trigger-analysis API every 30s and the listener will process each request. “Last updated” on each contract card updates when the report is written and the frontend poller applies it.
+
+---
+
+## Scan interval and production
+
+- The **first** scan runs a few seconds after the dashboard loads; subsequent runs use the interval (default 15 minutes).
+- **Production:** Deploy the CRE workflow to a Chainlink DON and set `CRE_AUTOMATION_PRIVATE_KEY` (or `CRE_REQUEST_PRIVATE_KEY`) in Vercel. Use Vercel Cron (see `vercel.json`) to hit `/api/cre/trigger-analysis` on a schedule (e.g. every 15 minutes). No backend in the Next.js app—only the consumer contract and the DON.
+
+---
+
+## Related repositories
+
+- **[chain-guard-cre](https://github.com/your-org/chain-guard-cre)** – CRE workflow (EVM log trigger, EVM reads, Chainlink feeds, AI, on-chain report).
+- **[chain-guard-smart-contract](https://github.com/your-org/chain-guard-smart-contract)** – ChainGuardRegistry and ChainGuardCREConsumer (Sepolia).
+
+Replace `your-org` with your GitHub username or organization in the links above.
+
+---
+
+## License
+
+MIT.

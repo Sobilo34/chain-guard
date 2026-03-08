@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { createPublicClient, createWalletClient, http } from "viem";
+import { createPublicClient, createWalletClient, http, decodeEventLog } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { getContracts } from "@/lib/contract-store";
@@ -110,6 +110,7 @@ async function runTrigger() {
     });
 
     let requested = 0;
+    const requestIds: Record<string, string> = {};
     const norm = (a: string) =>
       (a || "").toLowerCase().trim().startsWith("0x")
         ? (a || "").toLowerCase().trim()
@@ -120,28 +121,61 @@ async function runTrigger() {
       const chainSelectorName =
         c.chainSelectorName || c.chain || "ethereum-mainnet";
       if (!address || address === "0x") continue;
-      try {
-        const hash = await walletClient.writeContract({
-          address: CRE_CONSUMER_ADDRESS,
-          abi: CHAINGUARD_CRE_CONSUMER_ABI,
-          functionName: "requestRiskAnalysis",
-          args: [address as `0x${string}`, chainSelectorName],
-          account,
-        });
-        await publicClient.waitForTransactionReceipt({ hash });
-        requested++;
-      } catch (err: unknown) {
-        console.warn(
-          "[trigger-analysis] Failed for",
-          address,
-          (err as Error)?.message
-        );
+      const sendRequest = async (): Promise<boolean> => {
+        try {
+          const hash = await walletClient.writeContract({
+            address: CRE_CONSUMER_ADDRESS,
+            abi: CHAINGUARD_CRE_CONSUMER_ABI,
+            functionName: "requestRiskAnalysis",
+            args: [address as `0x${string}`, chainSelectorName],
+            account,
+          });
+          const receipt = await publicClient.waitForTransactionReceipt({ hash });
+          if (receipt?.logs?.length) {
+            for (const log of receipt.logs) {
+              try {
+                const decoded = decodeEventLog({
+                  abi: CHAINGUARD_CRE_CONSUMER_ABI,
+                  data: log.data,
+                  topics: log.topics,
+                });
+                if (
+                  decoded.eventName === "RiskAnalysisRequested" &&
+                  decoded.args?.requestId &&
+                  decoded.args?.contractAddress
+                ) {
+                  const reqId = decoded.args.requestId as string;
+                  const contractAddr = norm(decoded.args.contractAddress as string);
+                  requestIds[contractAddr] = reqId;
+                  break;
+                }
+              } catch {
+                // not our event
+              }
+            }
+          }
+          return true;
+        } catch (err: unknown) {
+          console.warn(
+            "[trigger-analysis] Failed for",
+            address,
+            (err as Error)?.message
+          );
+          return false;
+        }
+      };
+      let ok = await sendRequest();
+      if (!ok) {
+        await new Promise((r) => setTimeout(r, 2000));
+        ok = await sendRequest();
       }
+      if (ok) requested++;
     }
 
     return NextResponse.json({
       success: true,
       requested,
+      requestIds: Object.keys(requestIds).length > 0 ? requestIds : undefined,
       message:
         requested > 0
           ? `Triggered Full Analysis for ${requested} contract(s). CRE (listener or DON) will run the workflow and write reports on-chain.`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useAccount,
   useWriteContract,
@@ -97,10 +97,11 @@ export function useCREAssessment(requestId: `0x${string}` | null) {
     chainId: CRE_CONSUMER_CHAIN_ID,
   });
 
-  const assessment: OnchainAssessment | null =
-    data && Array.isArray(data) && data.length >= 6
-      ? parseOnchainAssessment(data as readonly [string, string, number, bigint, string, boolean])
-      : null;
+  const assessment = useMemo(() => {
+    if (!data || !Array.isArray(data) || data.length < 6) return null;
+    const parsed = parseOnchainAssessment(data as readonly [string, string, number, bigint, string, boolean]);
+    return parsed?.filled ? parsed : null;
+  }, [data]);
 
-  return { assessment: assessment?.filled ? assessment : null, isLoading, refetch };
+  return { assessment, isLoading, refetch };
 }

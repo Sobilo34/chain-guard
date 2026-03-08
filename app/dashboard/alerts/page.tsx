@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import * as framerMotion from "framer-motion";
 import { getAlerts, AlertPayload } from "@/lib/api";
+import { ContractStorage } from "@/lib/storage";
 
 const motion =
   (framerMotion as any).motion ||
@@ -223,6 +224,7 @@ export default function AlertsPage() {
       });
       const result = await res.json().catch(() => ({}));
       if (res.ok && result.success) {
+        ContractStorage.deleteAlert(id);
         setData((prev: any) => ({
           ...prev,
           alerts: prev.alerts.filter((a: any) => a.id !== id),

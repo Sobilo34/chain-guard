@@ -115,6 +115,7 @@ export class ContractStorage {
                     ...(c.latestScan != null ? { latestScan: c.latestScan } : {}),
                     ...(c.metrics != null && Object.keys(c.metrics).length > 0 ? { metrics: c.metrics } : {}),
                     ...(c.discoveredTokens != null && c.discoveredTokens.length > 0 ? { discoveredTokens: c.discoveredTokens } : {}),
+                    ...(c.pendingAssessmentRequestId ? { pendingAssessmentRequestId: c.pendingAssessmentRequestId } : {}),
                     name: c.name && c.name !== "New Contract" && c.name !== "Unknown" ? c.name : existing.name,
                     lastUpdate: c.lastUpdate || existing.lastUpdate,
                 });

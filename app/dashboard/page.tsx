@@ -31,26 +31,24 @@ import {
   FileCode2,
   AlertTriangle,
   TrendingUp,
-  Activity,
   Plus,
   ArrowUpRight,
   Clock,
   ChevronRight,
   Zap,
-  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
-import { useDashboardScan } from "@/app/dashboard/scan-context";
 import {
   getOverview,
   addContract,
   syncToServer,
+  applyOnchainAssessmentToContractStorage,
   type DashboardAlert,
   type DashboardContract,
 } from "@/lib/api";
 import { ContractStorage } from "@/lib/storage";
-import { formatTvl, formatSyncTime, parseTvlToNumber } from "@/lib/format-metrics";
+import { formatTvl, formatSyncTime, formatSyncTimeRelative, parseTvlToNumber } from "@/lib/format-metrics";
 import { createPublicClient, http, parseAbi } from "viem";
 import { toast } from "@/components/ui/toast";
 
@@ -239,7 +237,6 @@ export default function DashboardPage() {
     alertService?: string;
     lastSync?: string;
   }>({});
-  const scanContext = useDashboardScan();
   const refreshRef = useRef<(() => void) | undefined>(undefined);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -354,6 +351,20 @@ export default function DashboardPage() {
         if (triggerRes.ok) {
           const data = await triggerRes.json().catch(() => ({}));
           if (data.requested > 0) {
+            if (data.requestIds && typeof data.requestIds === "object") {
+              const contracts = ContractStorage.getContracts();
+              const norm = (a: string) => (a || "").toLowerCase().trim().startsWith("0x") ? (a || "").toLowerCase().trim() : `0x${(a || "").toLowerCase().trim()}`;
+              let updated = false;
+              for (const [addr, reqId] of Object.entries(data.requestIds) as [string, string][]) {
+                const normalized = norm(addr);
+                const i = contracts.findIndex((c) => norm(c.address) === normalized);
+                if (i >= 0) {
+                  contracts[i] = { ...contracts[i], pendingAssessmentRequestId: reqId };
+                  updated = true;
+                }
+              }
+              if (updated) ContractStorage.saveContracts(contracts);
+            }
             refreshRef.current?.();
           }
         }
@@ -369,20 +380,61 @@ export default function DashboardPage() {
           }
           refreshRef.current?.();
         }
+        ContractStorage.updateSyncTimestamp();
+        refreshRef.current?.();
       } catch (e) {
         console.error("Background scan failed:", e);
       }
     };
 
     intervalId = setInterval(runBackgroundScan, intervalMs);
+    const initialTimeoutId = setTimeout(() => runBackgroundScan(), 4000);
     return () => {
       if (intervalId) clearInterval(intervalId);
+      clearTimeout(initialTimeoutId);
     };
   }, [liveContracts.length]);
 
-  const handleQuickScan = () => {
-    scanContext?.runForceScan();
-  };
+  // Poll for cron/trigger-analysis results: when CRE fills an assessment on-chain, update that contract's lastUpdate.
+  useEffect(() => {
+    const POLL_MS = 5000;
+    let pollId: ReturnType<typeof setInterval> | undefined;
+    const pollPendingAssessments = async () => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const contracts = ContractStorage.getContracts();
+      const pending = contracts.filter((c) => c.pendingAssessmentRequestId);
+      if (pending.length === 0) return;
+      for (const contract of pending) {
+        const requestId = contract.pendingAssessmentRequestId;
+        if (!requestId) continue;
+        try {
+          const res = await fetch(`/api/cre/assessment?requestId=${encodeURIComponent(requestId)}`);
+          if (!res.ok) continue;
+          const json = await res.json().catch(() => ({}));
+          const assessment = json.assessment;
+          if (!assessment?.filled) continue;
+          applyOnchainAssessmentToContractStorage(assessment.contractAddress, assessment);
+          const all = ContractStorage.getContracts();
+          const norm = (a: string) => (a || "").toLowerCase().trim().startsWith("0x") ? (a || "").toLowerCase().trim() : `0x${(a || "").toLowerCase().trim()}`;
+          const addr = norm(assessment.contractAddress);
+          const i = all.findIndex((c) => norm(c.address) === addr);
+          if (i >= 0) {
+            const next = { ...all[i] };
+            delete next.pendingAssessmentRequestId;
+            all[i] = next;
+            ContractStorage.saveContracts(all);
+          }
+          refreshRef.current?.();
+        } catch {
+          // ignore per-request errors
+        }
+      }
+    };
+    pollId = setInterval(pollPendingAssessments, POLL_MS);
+    return () => {
+      if (pollId) clearInterval(pollId);
+    };
+  }, []);
 
   const getRiskThresholds = (profile: string) => {
     switch (profile) {
@@ -565,40 +617,12 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground tabular-nums" title={systemStatus.lastSync || undefined}>
-                Sync: {formatSyncTime(systemStatus.lastSync)}
+              <span className="text-xs font-medium text-muted-foreground tabular-nums" title={systemStatus.lastSync ? `Last run: ${formatSyncTime(systemStatus.lastSync)}` : undefined}>
+                Last run: {formatSyncTimeRelative(systemStatus.lastSync)}
               </span>
             </div>
           </div>
 
-          {(scanContext?.scanMessage ?? null) && (
-            <motion.div
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 rounded-xl bg-primary/5 px-4 py-2 border border-primary/20"
-            >
-              <Activity className="h-3.5 w-3.5 text-primary animate-pulse" />
-              <span className="text-xs font-bold text-primary italic">
-                {scanContext?.scanMessage}
-              </span>
-            </motion.div>
-          )}
-
-          <Button
-            size="lg"
-            variant="outline"
-            disabled={scanContext?.isScanning}
-            onClick={handleQuickScan}
-            className="h-12 rounded-2xl border-border/60 bg-background/50 backdrop-blur-md transition-all hover:border-primary/50 hover:bg-primary/5"
-          >
-            <RefreshCw
-              className={cn(
-                "mr-2 h-4 w-4 text-primary",
-                scanContext?.isScanning && "animate-spin",
-              )}
-            />
-            {scanContext?.isScanning ? "Scanning Ecosystem..." : "Force Scan"}
-          </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button
@@ -930,9 +954,9 @@ export default function DashboardPage() {
                               {getRiskBadge(contract.riskLevel || "low")}
                             </div>
                             {contract.lastUpdate && (
-                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground pl-7" title={contract.lastUpdate}>
+                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground pl-7" title={formatSyncTime(contract.lastUpdate)}>
                                 <Clock className="h-2.5 w-2.5" />
-                                Updated {formatSyncTime(contract.lastUpdate)}
+                                Updated {formatSyncTimeRelative(contract.lastUpdate)}
                               </span>
                             )}
                           </div>

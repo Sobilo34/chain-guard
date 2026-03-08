@@ -1,4 +1,5 @@
 import { ContractStorage } from "./storage";
+import type { OnchainAssessment } from "./cre-consumer";
 
 export const API_BASE_URL = "/api/cre";
 
@@ -82,6 +83,8 @@ export type DashboardContract = {
   fullAnalysis?: AnalyzeResult;
   /** Tokens discovered when contract was added or when analysis ran; used for portfolio TVL. */
   discoveredTokens?: Array<{ address: string; symbol: string; decimals?: number }>;
+  /** Set when trigger-analysis returns requestIds; cleared after assessment is applied (so cron results update lastUpdate). */
+  pendingAssessmentRequestId?: string;
 };
 
 export type DashboardAlert = {
@@ -253,6 +256,31 @@ export async function runAnalyze(address: string, network: string): Promise<Anal
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Apply a filled on-chain CRE assessment to a contract in storage (lastUpdate, riskLevel, latestScan).
+ * Used by the dashboard background poller so cron/trigger-analysis results update each contract's "Last updated".
+ */
+export function applyOnchainAssessmentToContractStorage(
+  contractAddress: string,
+  assessment: OnchainAssessment
+): void {
+  const with0x =
+    (contractAddress || "").toLowerCase().trim().startsWith("0x")
+      ? (contractAddress || "").toLowerCase().trim()
+      : `0x${(contractAddress || "").toLowerCase().trim()}`;
+  const riskLevel = (assessment.riskLevelLabel || "LOW").toLowerCase() as "low" | "medium" | "high";
+  ContractStorage.updateContract(with0x, {
+    lastUpdate: new Date().toISOString(),
+    riskLevel,
+    status: assessment.riskLevelLabel || "LOW",
+    riskScore: Number(assessment.riskScore),
+    latestScan: {
+      reasoning: assessment.summary,
+      riskLevel: assessment.riskLevelLabel,
+    },
+  });
 }
 
 /** True when the contract name is a placeholder (unknown/generic). Only then should AI analysis update the name. */

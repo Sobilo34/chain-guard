@@ -53,6 +53,30 @@ export function formatSyncTime(iso: string | undefined | null): string {
   });
 }
 
+/**
+ * Format ISO timestamp for "last run" display: relative for recent (< 2 min), else absolute.
+ * Helps verify cron/interval is firing (e.g. "30s ago", "Just now").
+ */
+export function formatSyncTimeRelative(iso: string | undefined | null): string {
+  if (!iso || typeof iso !== "string") return "—";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return iso;
+  const now = Date.now();
+  const ms = now - date.getTime();
+  const sec = Math.floor(ms / 1000);
+  const min = Math.floor(sec / 60);
+  if (ms < 5000) return "Just now";
+  if (sec < 60) return `${sec}s ago`;
+  if (min < 2) return `${min}m ago`;
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 /** Parse stored TVL string (e.g. "$1.2M", "$50.5k") back to number for aggregation */
 export function parseTvlToNumber(tvlStr: string | undefined): number {
   if (!tvlStr || typeof tvlStr !== "string") return 0;

@@ -104,6 +104,7 @@ import {
   formatPrice,
   formatLiquidityPercent,
   formatSyncTime,
+  formatSyncTimeRelative,
 } from "@/lib/format-metrics";
 import { DashboardCharts } from "@/components/dashboard/dashboard-charts";
 import { useEffect, useRef, useState } from "react";
@@ -671,6 +672,7 @@ export default function ContractDetailPage({
     const newName = !isGenericName
       ? discoveredName
       : fallbackName || data?.name;
+    // Only update stored name when current name is generic (e.g. "New Contract"); never overwrite a name the user has set.
     const shouldUpdateName =
       newName && isGenericOrUnknownContractName(data?.name);
 
@@ -1572,10 +1574,10 @@ export default function ContractDetailPage({
                   {data?.lastUpdate && (
                     <span
                       className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
-                      title={data.lastUpdate}
+                      title={formatSyncTime(data.lastUpdate)}
                     >
                       <Clock className="h-3 w-3" />
-                      Last analyzed: {formatSyncTime(data.lastUpdate)}
+                      Last analyzed: {formatSyncTimeRelative(data.lastUpdate)}
                     </span>
                   )}
                 </div>
@@ -2005,7 +2007,7 @@ export default function ContractDetailPage({
                       <AccordionContent className="pb-4">
                         <div className="text-xs font-semibold leading-relaxed text-foreground/90 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.05] whitespace-pre-wrap">
                           {mitigationStrategy ||
-                            "Run Full Analysis or Force Scan (with post-CRE AI) for recommendations."}
+                            "Run Full Analysis (with post-CRE AI) for recommendations."}
                         </div>
                       </AccordionContent>
                     </AccordionItem>

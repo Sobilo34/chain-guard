@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { useDashboardScan } from "@/app/dashboard/scan-context";
 import { getContracts, addContract, syncToServer, type DashboardContract } from "@/lib/api";
-import { formatSyncTime } from "@/lib/format-metrics";
+import { formatSyncTime, formatSyncTimeRelative } from "@/lib/format-metrics";
 import { ContractStorage } from "@/lib/storage";
 import { toast } from "@/components/ui/toast";
 
@@ -318,10 +318,6 @@ export default function ContractsPage() {
     } finally {
       setIsAddingContract(false);
     }
-  };
-
-  const handleGlobalScan = () => {
-    scanContext?.runForceScan();
   };
 
   const handleContractScan = async (address: string) => {
@@ -688,24 +684,6 @@ export default function ContractsPage() {
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
-          <div className="h-11 w-px bg-border/40 hidden sm:block" />
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={scanContext?.isScanning}
-            onClick={handleGlobalScan}
-            className={cn(
-              "h-11 w-11 rounded-2xl border border-border/30 hover:bg-muted/50",
-              scanContext?.isScanning && "animate-pulse border-primary/40 text-primary",
-            )}
-          >
-            <Zap
-              className={cn(
-                "h-4 w-4",
-                scanContext?.isScanning ? "fill-primary" : "text-muted-foreground",
-              )}
-            />
-          </Button>
         </div>
       </motion.div>
 
@@ -779,9 +757,9 @@ export default function ContractsPage() {
                       </div>
                     </div>
                     {contract.lastUpdate && (
-                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground" title={contract.lastUpdate}>
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-muted-foreground" title={formatSyncTime(contract.lastUpdate)}>
                         <Clock className="h-3 w-3 shrink-0" />
-                        Last updated {formatSyncTime(contract.lastUpdate)}
+                        Last updated {formatSyncTimeRelative(contract.lastUpdate)}
                       </div>
                     )}
                   </CardContent>
