@@ -1,8 +1,32 @@
 # ChainGuard Sentinel
 
-**AI-powered smart contract risk monitoring—decentralized by Chainlink CRE.**
+**AI-powered risk monitoring for deployed smart contracts, wired to Chainlink CRE.**
 
-ChainGuard Sentinel is a monitoring and alerting system for **already-deployed** smart contracts. It detects market-based risks (depegs, volatility spikes, liquidity drops) using AI and Chainlink’s Runtime Environment (CRE), without requiring any change to your contract code.
+![Stack](https://img.shields.io/badge/stack-Next.js%2016%20%C2%B7%20wagmi%20%C2%B7%20viem-black)
+![Chain](https://img.shields.io/badge/chain-Sepolia-blue)
+![Chainlink](https://img.shields.io/badge/Chainlink-CRE-375BD2)
+![License](https://img.shields.io/badge/license-MIT-green)
+[![Live Demo](https://img.shields.io/badge/demo-live-22c55e)](https://chain-guard-pa03.onrender.com/)
+
+ChainGuard Sentinel is a monitoring dashboard for **already-deployed** smart contracts. You add a contract address; the app requests a risk analysis through a **Chainlink Runtime Environment (CRE)** consumer contract on Sepolia, and a CRE workflow reads on-chain state, pulls market data, runs AI analysis, and writes the report back on-chain for the UI to display — with no change to your contract code.
+
+> **Status:** Hackathon MVP with a working end-to-end on-chain CRE path (Sepolia consumer → CRE workflow → on-chain report → UI). Some capabilities are simulated locally or marked as roadmap; see [What's shipped vs roadmap](#whats-shipped-vs-roadmap) for an honest breakdown.
+
+### Live demo
+
+- **App:** [https://chain-guard-pa03.onrender.com/](https://chain-guard-pa03.onrender.com/)
+- **Demo video:** [Watch on Google Drive](https://drive.google.com/file/d/1QzXykooArCrM57OPvpoO5ILw7Lsbeo3Q/view?usp=drive_link)
+- **Repo:** [github.com/Sobilo34/chain-guard](https://github.com/Sobilo34/chain-guard)
+
+### Screenshots
+
+| Landing | Features & onboarding |
+| --- | --- |
+| ![Landing page — wallet connected](docs/screenshots/landing.png) | ![Landing page — alert email and feature cards](docs/screenshots/landing-features.png) |
+
+| Command Center | Monitored Assets |
+| --- | --- |
+| ![Dashboard command center](docs/screenshots/dashboard.png) | ![Monitored contracts registry](docs/screenshots/contracts.png) |
 
 ---
 
@@ -14,23 +38,23 @@ Smart contract owners face ongoing risk after deployment: market moves, liquidit
 - Don’t **orchestrate** monitoring, AI analysis, and alerts in one decentralized flow.
 - Require custom infra for **multi-chain** and high-frequency data.
 
-ChainGuard Sentinel uses **Chainlink CRE** to run the full pipeline (EVM reads → market data → AI analysis → on-chain report) as a **single decentralized workflow**, so execution is tamper-resistant, verifiable, and scalable.
+ChainGuard Sentinel uses **Chainlink CRE** to run the full pipeline (EVM reads → market data → AI analysis → on-chain report) as a **single workflow**. In the MVP this workflow is simulated locally against Sepolia via the CRE CLI; deployed to a Chainlink DON it becomes tamper-resistant, verifiable, and horizontally scalable — the same workflow, only where it runs changes.
 
 ---
 
 ## How we address it
 
 1. **One-click risk analysis**  
-   You add a contract address; the app sends a request to a **CRE consumer contract** on Sepolia. A CRE workflow (EVM log trigger) picks up the event, reads contract state and market data, runs AI risk analysis, and writes the report back on-chain. The dashboard shows risk level, score, and summary without you running any backend.
+   You add a contract address; the app sends a request to a **CRE consumer contract** on Sepolia. A CRE workflow (EVM log trigger) picks up the event, reads contract state and market data, runs AI risk analysis, and writes the report back on-chain. The dashboard polls the consumer contract and shows risk level, score, and summary, then optionally enriches the on-chain summary with a fuller AI report.
 
 2. **Automatic scanning at interval**  
-   The dashboard (or Vercel Cron in production) calls a trigger API at a configurable interval (e.g. every 30 seconds for testing, 15 minutes in production). That API sends `requestRiskAnalysis` for every monitored contract. CRE (local listener or DON) runs the workflow and writes reports; the UI polls and updates “Last updated” so you can confirm the cron is working.
+   The dashboard (or Vercel Cron in production) calls a trigger API at a configurable interval (e.g. every 30 seconds for testing, 15 minutes in production). That API sends `requestRiskAnalysis` for every monitored contract. CRE (local listener or DON) runs the workflow and writes reports; the UI polls and updates “Last updated” so you can confirm scanning is working.
 
 3. **Persistence and clarity**  
-   Contracts and analysis results are cached in the frontend; “Last updated” and relative timestamps are shown across the dashboard and contract pages so you can track when each contract was last analyzed.
+   Contracts and analysis results are cached client-side (localStorage), with an optional server/on-chain registry for shared state. “Last updated” and relative timestamps are shown across the dashboard and contract pages so you can track when each contract was last analyzed.
 
-4. **No backend required**  
-   The flow is: **Frontend → Consumer contract (tx) → CRE workflow → Consumer contract (report)**. The Next.js app only talks to the chain and to its own API routes; the CRE workflow runs locally (`cre workflow simulate`) or on a Chainlink DON.
+4. **Thin serverless backend**  
+   The core flow is: **Frontend → Consumer contract (tx) → CRE workflow → Consumer contract (report)**. There is no separate always-on server: the Next.js app talks to the chain and to its own serverless API routes (trigger, assessment poll, enrich, sync, email). The heavy risk pipeline runs in the CRE workflow — locally via `cre workflow simulate` (through the included listener) or on a Chainlink DON in production.
 
 ---
 
@@ -53,9 +77,32 @@ This satisfies the hackathon requirement: **build/simulate/deploy a CRE workflow
 
 ---
 
-## Temparary Deployment
+## What's shipped vs roadmap
 
-[ChainGuard](https://chain-guard.pxxl.click/)
+Being explicit about what actually works today versus what is planned:
+
+| Capability | Status |
+| --- | --- |
+| Wallet connect (Sepolia + L2s) | ✅ Shipped |
+| Add / remove monitored contracts (localStorage + optional sync) | ✅ Shipped |
+| On-chain Full Analysis (request → CRE → on-chain report → UI poll) | ✅ Shipped |
+| Post-CRE AI enrichment of the on-chain summary | ✅ Shipped (needs `OPENROUTER_API_KEY`) |
+| Contract discovery + AI naming | ✅ Shipped |
+| Portfolio / TVL reads (Chainlink feeds + DefiLlama fallback) | ✅ Shipped |
+| Interval-triggered requests (client interval + Vercel Cron) | ✅ Shipped |
+| Local CRE simulation via listener script | ✅ Shipped |
+| Test email notifications (Resend) | ✅ Shipped |
+| CRE workflow deployed to a Chainlink DON | 🧭 Roadmap (MVP simulates via CRE CLI) |
+| Automatic alerts on HIGH risk from the on-chain path | 🧭 Roadmap (alert wiring exists only on a legacy code path) |
+| Slack / Telegram / webhook notifications | 🧭 Roadmap (settings UI placeholders) |
+| Automated tests / CI | 🧭 Roadmap (none yet) |
+
+---
+
+## Deployment
+
+- **Live app:** [https://chain-guard-pa03.onrender.com/](https://chain-guard-pa03.onrender.com/)
+- **Source:** [github.com/Sobilo34/chain-guard](https://github.com/Sobilo34/chain-guard)
 
 ## Stack and architecture
 
@@ -114,7 +161,7 @@ As per the hackathon submission guidelines, here are the files in **this reposit
 | [app/api/cre/simulate/route.ts](app/api/cre/simulate/route.ts)             | CRE simulate API                                                    |
 | [app/api/cre/enrich/route.ts](app/api/cre/enrich/route.ts)                 | Enrich CRE output with AI                                           |
 | [app/api/cre/portfolio/route.ts](app/api/cre/portfolio/route.ts)           | Portfolio/TVL using chain data                                      |
-| [app/api/cron/scan/route.ts](app/api/cron/scan/route.ts)                   | Cron entrypoint; coordinates with trigger-analysis                  |
+| [app/api/cron/scan/route.ts](app/api/cron/scan/route.ts)                   | Cron entrypoint (stub; interval scanning is driven by trigger-analysis) |
 | [lib/cre/run-discovery.ts](lib/cre/run-discovery.ts)                       | Contract discovery (EVM reads, optional AI naming)                  |
 | [lib/cre/feeds.ts](lib/cre/feeds.ts)                                       | Chainlink price feed addresses                                      |
 | [lib/cre/chainlink-prices.ts](lib/cre/chainlink-prices.ts)                 | Chainlink price feed usage                                          |
@@ -131,7 +178,7 @@ As per the hackathon submission guidelines, here are the files in **this reposit
 | File                                                             | Purpose                                                   |
 | ---------------------------------------------------------------- | --------------------------------------------------------- |
 | [app/dashboard/scan-context.tsx](app/dashboard/scan-context.tsx) | Scan context (legacy; trigger-analysis used for interval) |
-| [app/dashboard/alerts/page.tsx](app/dashboard/alerts/page.tsx)   | Alerts feed (alerts may be driven by CRE results)         |
+| [app/dashboard/alerts/page.tsx](app/dashboard/alerts/page.tsx)   | Alerts feed UI (auto-alerting from the on-chain path is roadmap) |
 | [app/page.tsx](app/page.tsx)                                     | Landing; mentions CRE/Chainlink                           |
 | [components/web3-provider.tsx](components/web3-provider.tsx)     | Web3 config for wallet and chain (Sepolia for consumer)   |
 | [vercel.json](vercel.json)                                       | Cron for `/api/cre/trigger-analysis` and `/api/cron/scan` |
@@ -201,13 +248,23 @@ With the dashboard open, the app will call the trigger-analysis API every 30s an
 
 ## Related repositories
 
+- **[chain-guard](https://github.com/Sobilo34/chain-guard)** – This repo: Next.js dashboard, API routes, CRE listener.
 - **[chain-guard-cre](https://github.com/Sobilo34/chain-guard-cre)** – CRE workflow (EVM log trigger, EVM reads, Chainlink feeds, AI, on-chain report).
 - **[chain-guard-smart-contract](https://github.com/Sobilo34/chain-guard-smart-contract)** – ChainGuardRegistry and ChainGuardCREConsumer (Sepolia).
 
-Replace `Sobilo34` with your GitHub username or organization in the links above.
+---
+
+## Author & opportunities
+
+Built by **Bilal Oyeleke Soliu**.
+
+I'm open to roles, collaborations, and building on-chain + AI infrastructure. If ChainGuard Sentinel resonates, reach out:
+
+- GitHub: [github.com/Sobilo34](https://github.com/Sobilo34)
+- Contact: `<CONTACT_URL>` *(update with your email or LinkedIn)*
 
 ---
 
 ## License
 
-MIT.
+Released under the [MIT License](LICENSE) © 2026 Bilal Oyeleke Soliu.
